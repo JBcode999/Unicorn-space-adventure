@@ -125,10 +125,13 @@ function draw() {
         // Create explosion effect when player hits asteroid
         createExplosionEffect(player.pos.x, player.pos.y);
         
+        // Cache the final score to ensure it doesn't change
+        const finalScore = score;
+        
         // Show leaderboard form after a short delay
         setTimeout(() => {
           if (window.showLeaderboardForm) {
-            window.showLeaderboardForm(score);
+            window.showLeaderboardForm(finalScore);
           } else {
             console.error('Leaderboard functionality not loaded. Please check the browser console for errors.');
           }

@@ -23,6 +23,8 @@ let leaderboardTable;
 let leaderboardBody;
 let leaderboardLoading;
 let leaderboardError;
+let isSubmitting = false; // Flag to prevent double submissions
+let currentScore = 0; // Store the current score value
 
 // Function to get game state from sketch.js
 function getGameState() {
@@ -120,7 +122,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Show leaderboard form modal when game ends
 function showLeaderboardForm(finalScore) {
-  finalScoreElement.textContent = finalScore;
+  // Store the score globally to ensure it's available for submission
+  currentScore = finalScore;
+  
+  // Update the displayed score
+  if (finalScoreElement) {
+    finalScoreElement.textContent = finalScore;
+  }
+  
+  // Reset submission flag
+  isSubmitting = false;
   
   // Ensure canvas doesn't capture events
   const canvas = document.querySelector('canvas');
@@ -199,6 +210,15 @@ window.showLeaderboardForm = showLeaderboardForm;
 
 // Handle score submission
 async function handleScoreSubmit(event) {
+  // Prevent double submissions
+  if (isSubmitting) {
+    console.log('Submission already in progress, preventing duplicate');
+    return;
+  }
+  
+  // Set the submission flag
+  isSubmitting = true;
+  
   // Prevent default form submission if event was passed
   if (event && event.preventDefault) {
     event.preventDefault();
@@ -211,11 +231,17 @@ async function handleScoreSubmit(event) {
   
   const email = emailInput.value.trim();
   const name = nameInput.value.trim() || 'Anonymous Unicorn';
-  const score = parseInt(finalScoreElement.textContent);
+  
+  // Use the stored score value instead of reading from the element
+  // This ensures we have the correct score even if the UI hasn't updated yet
+  const score = currentScore;
+  
+  console.log('Submitting score:', score);
   
   // Email validation
   if (!validateEmail(email)) {
     showFormStatus('Please enter a valid email address', 'error');
+    isSubmitting = false; // Reset submission flag
     return;
   }
   
@@ -265,6 +291,9 @@ async function handleScoreSubmit(event) {
     console.error('Error submitting score:', error);
     showFormStatus('Failed to submit score. Please try again.', 'error');
   } finally {
+    // Reset submission flag
+    isSubmitting = false;
+    
     // Reset button state
     submitButton.disabled = false;
     submitButton.textContent = 'Submit Score';
