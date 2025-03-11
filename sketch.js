@@ -11,6 +11,7 @@ let rainbowTrail = []; // Array to store rainbow trail particles
 let messages = []; // Array for temporary on-screen messages
 let sparkles = []; // Array for sparkle effects
 let shootingStars = []; // Array for shooting stars
+let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
 // Timing for special effects
 let nextShootingStarTime = 0;
@@ -1038,37 +1039,55 @@ function windowResized() {
 
 // Function to handle touch controls
 function touchMoved() {
-  // Move player based on touch position
-  // Calculate position relative to canvas center
-  let canvasCenter = width / 2;
-  let touchPosition = touches[0] || { x: mouseX, y: mouseY };
-  
-  // Move only if touch is active
-  if (gameState === "playing") {
-    // Move horizontally towards touch position
-    if (Math.abs(touchPosition.x - player.pos.x) > 10) {
-      if (touchPosition.x > player.pos.x) {
-        player.pos.x += player.speed;
-      } else {
-        player.pos.x -= player.speed;
+  // Only prevent default if inside canvas
+  if (mouseX >= 0 && mouseX <= width && mouseY >= 0 && mouseY <= height) {
+    // Update player position for touch movement
+    if (gameState === "playing") {
+      const touchFactor = isMobile ? 1.5 : 1; // Faster movement on mobile
+      
+      // Calculate delta from previous position
+      const deltaX = mouseX - pmouseX;
+      const deltaY = mouseY - pmouseY;
+      
+      // Add smoothing for touch movements
+      const smoothingFactor = 0.7;
+      const smoothDeltaX = deltaX * smoothingFactor * touchFactor;
+      const smoothDeltaY = deltaY * smoothingFactor * touchFactor;
+      
+      // Update player position
+      player.pos.x += smoothDeltaX;
+      player.pos.y += smoothDeltaY;
+      
+      // Keep player within bounds
+      player.pos.x = constrain(player.pos.x, player.size, width - player.size);
+      player.pos.y = constrain(player.pos.y, player.size, height - player.size);
+      
+      // Ensure rainbow trail is created on mobile too
+      if (frameCount % 2 === 0) {
+        rainbowTrail.push(new RainbowParticle(player.pos.x, player.pos.y));
+        if (rainbowTrail.length > 25) {
+          rainbowTrail.shift();
+        }
       }
     }
     
-    // Keep player within bounds
-    player.pos.x = constrain(player.pos.x, player.size, width - player.size);
+    return false; // Prevent default action only for canvas area
   }
-  
-  // Prevent default behavior to avoid scrolling
-  return false;
+  // Return true to allow default behavior (like scrolling) outside the canvas
+  return true;
 }
 
 // Function to handle touch on screen
 function touchStarted() {
-  // Restart game if game over and screen is tapped
-  if (gameState === "gameover") {
-    resetGame();
+  // Only prevent default if inside canvas
+  if (mouseX >= 0 && mouseX <= width && mouseY >= 0 && mouseY <= height) {
+    // Restart game if game over and screen is tapped
+    if (gameState === "gameover") {
+      resetGame();
+    }
+    
+    return false; // Prevent default action only for canvas area
   }
-  
-  // Prevent default behavior
-  return false;
+  // Return true to allow default behavior (like scrolling) outside the canvas
+  return true;
 }

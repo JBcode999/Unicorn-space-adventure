@@ -22,15 +22,16 @@
         setTimeout(function() {
           const canvas = document.querySelector('canvas');
           if (canvas) {
-            // Set canvas position
-            canvas.style.position = 'absolute';
-            canvas.style.left = '50%';
-            canvas.style.top = '50%';
-            canvas.style.transform = 'translate(-50%, -50%)';
-            canvas.style.margin = '0';
-            
-            // Ensure canvas is visible
+            // Set responsive canvas styles
+            canvas.style.position = 'relative';
             canvas.style.display = 'block';
+            canvas.style.margin = '0 auto';
+            
+            if (window.innerWidth <= 768) {
+              // Mobile-specific adjustments
+              canvas.style.maxWidth = '100%';
+              canvas.style.height = 'auto';
+            }
           }
         }, 100); // Small delay to ensure canvas is created
       }
@@ -40,6 +41,24 @@
       
       // Center canvas on window resize
       window.addEventListener('resize', centerCanvas);
+      
+      // Fix touch interaction with modals
+      const modals = document.querySelectorAll('.modal');
+      modals.forEach(modal => {
+        modal.addEventListener('touchmove', function(e) {
+          // Allow default scrolling behavior inside modals
+          e.stopPropagation();
+        }, {passive: true}); // Set to passive to improve scrolling performance
+      });
+      
+      // Add touch action handling
+      document.addEventListener('DOMContentLoaded', function() {
+        // Apply touch-action manipulation to all interactive elements
+        const interactiveElements = document.querySelectorAll('button, input, .modal-content');
+        interactiveElements.forEach(el => {
+          el.style.touchAction = 'manipulation';
+        });
+      });
     };
     
     // Function to copy wallet address to clipboard
@@ -83,19 +102,45 @@
       padding: 0;
       font-family: 'Arial Rounded MT Bold', 'Arial', sans-serif;
       background-color: #111;
-      overflow-x: hidden;
       min-height: 100vh;
       width: 100%;
       position: relative;
       display: flex;
       flex-direction: column;
       align-items: center;
+      padding-bottom: 50px; /* Add space at bottom for content */
+    }
+    
+    /* Control overflow behavior differently for mobile vs desktop */
+    @media (max-width: 768px) {
+      body {
+        overflow-y: auto; /* Allow vertical scrolling on mobile */
+        -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+      }
+    }
+    
+    @media (min-width: 769px) {
+      body {
+        overflow-y: hidden; /* Prevent vertical scrolling on desktop */
+      }
     }
     
     canvas, #defaultCanvas0 {
       display: block !important;
       margin: 0 auto !important;
       z-index: 10;
+      position: relative !important; /* Changed from absolute */
+      transform: none !important; /* Remove transform that was causing issues */
+    }
+    
+    /* Mobile layout container */
+    .mobile-container {
+      width: 100%;
+      max-width: 800px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
     }
     
     #game-container {
@@ -103,22 +148,24 @@
       width: 100%;
       max-width: 800px;
       margin: 0 auto;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      flex: 1;
+      padding-top: 150px; /* Space for message box */
+      z-index: 20;
     }
     
     /* Mobile-specific adjustments */
     @media (max-width: 768px) {
       body {
-        padding-top: 150px; /* Space for the message box */
-        padding-bottom: 20px;
+        padding-top: 0;
+      }
+      
+      .mobile-container {
+        padding-top: 150px; /* Space for the fixed message box */
       }
       
       canvas, #defaultCanvas0 {
         max-width: 100%;
         height: auto !important;
+        touch-action: none; /* Prevent default touch actions inside canvas only */
       }
       
       #message-box {
@@ -132,6 +179,10 @@
         z-index: 100;
       }
       
+      #game-container {
+        padding-top: 20px;
+      }
+      
       #donation-panel {
         position: relative !important;
         top: auto !important;
@@ -140,6 +191,15 @@
         margin: 20px auto !important;
         width: 90% !important;
         max-width: 350px !important;
+        order: 3; /* Move donation panel below the game */
+      }
+      
+      .modal {
+        padding-top: 150px;
+      }
+      
+      .modal-content {
+        margin-bottom: 50px;
       }
       
       .button-row {
@@ -169,14 +229,16 @@
       left: 0;
       right: 0;
       bottom: 0;
-      background-color: rgba(0, 0, 0, 0.7);
+      background-color: rgba(0, 0, 0, 0.85); /* Darker background for better visibility */
       display: flex;
       justify-content: center;
       align-items: center;
-      z-index: 1000;
+      z-index: 2000; /* Higher z-index to ensure visibility */
       opacity: 0;
       pointer-events: none;
       transition: opacity 0.3s ease;
+      overflow-y: auto; /* Allow scrolling within modal */
+      padding: 20px;
     }
     
     .modal.active {
@@ -194,7 +256,10 @@
       box-shadow: 0 0 30px rgba(200, 100, 255, 0.5);
       text-align: center;
       position: relative;
-      overflow: hidden;
+      overflow-y: auto; /* Allow vertical scrolling within modal */
+      max-height: 80vh; /* Limit height to allow scrolling */
+      margin: 50px auto; /* Add margin to ensure visibility */
+      -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
     }
     
     .modal-content::before {
@@ -272,6 +337,7 @@
       transition: all 0.3s;
       min-width: 120px;
       box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+      min-height: 44px;
     }
     
     .magical-button:hover {
@@ -558,43 +624,59 @@
     .game-title {
       animation: colorShift 8s infinite ease-in-out;
     }
+    
+    /* Touch-friendly improvements */
+    .modal input, 
+    .modal button,
+    .wallet-copy input,
+    .wallet-copy button {
+      font-size: 16px !important; /* Prevent auto-zoom on mobile */
+      touch-action: manipulation; /* Better touch handling */
+    }
+    
+    /* Improve tap targets */
+    .magical-button {
+      min-height: 44px; /* Apple's recommended min size */
+    }
   </style>
 </head>
 <body>
-  <div id="game-container">
-    <!-- Game canvas will be created here by p5.js -->
-  </div>
-  
-  <!-- Top Message Box -->
-  <div id="message-box">
-    <div class="message-content">
-      <h2>Good attracts GOOD</h2>
-      <div class="title-divider">
-        <span>★</span>
-      </div>
-      <h3 class="game-title">Unicorn Space Adventure</h3>
-    </div>
-  </div>
-  
-  <!-- Donation Panel -->
-  <div id="donation-panel">
-    <div class="donation-content">
-      <h2>Support Izzy's College Fund</h2>
-      <div class="unicorn-divider">
-        <span>✨ 🦄 ✨</span>
-      </div>
-      <p>All donations go to Izzy, my daughter, to help fund her college education and music studies.</p>
-      <div class="wallet-container">
-        <label for="wallet-address">Solana Crypto Wallet:</label>
-        <div class="wallet-copy">
-          <input type="text" id="wallet-address" value="AdKgDcP39A7LNBNxMUCjDAJJM6SZXRvf3r7AnSTdZWWa" readonly>
-          <button id="copy-button" class="magical-button" onclick="copyWalletAddress()">
-            <span id="copy-text">Copy</span>
-          </button>
+  <div class="mobile-container">
+    <!-- Top Message Box -->
+    <div id="message-box">
+      <div class="message-content">
+        <h2>Good attracts GOOD</h2>
+        <div class="title-divider">
+          <span>★</span>
         </div>
+        <h3 class="game-title">Unicorn Space Adventure</h3>
       </div>
-      <div class="thank-you-message">
-        <p>Thank you for your generosity! ❤️</p>
+    </div>
+    
+    <div id="game-container">
+      <!-- Game canvas will be created here by p5.js -->
+    </div>
+    
+    <!-- Donation Panel -->
+    <div id="donation-panel">
+      <div class="donation-content">
+        <h2>Support Izzy's College Fund</h2>
+        <div class="unicorn-divider">
+          <span>✨ 🦄 ✨</span>
+        </div>
+        <p>All donations go to Izzy, my daughter, to help fund her college education and music studies.</p>
+        <div class="wallet-container">
+          <label for="wallet-address">Solana Crypto Wallet:</label>
+          <div class="wallet-copy">
+            <input type="text" id="wallet-address" value="AdKgDcP39A7LNBNxMUCjDAJJM6SZXRvf3r7AnSTdZWWa" readonly>
+            <button id="copy-button" class="magical-button" onclick="copyWalletAddress()">
+              <span id="copy-text">Copy</span>
+            </button>
+          </div>
+        </div>
+        <div class="thank-you-message">
+          <p>Thank you for your generosity! ❤️</p>
+        </div>
       </div>
     </div>
   </div>
