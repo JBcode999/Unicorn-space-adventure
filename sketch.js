@@ -22,27 +22,15 @@ function preload() {
 }
 
 function setup() {
-  // Create canvas with specific dimensions
-  let canvas = createCanvas(800, 600);
+  // Create a responsive canvas based on device size
+  let canvasWidth = min(windowWidth - 40, 800);
+  let canvasHeight = min(windowHeight - 200, 600);
   
-  // Center canvas both using parent and CSS positioning
+  // Create canvas with responsive dimensions
+  let canvas = createCanvas(canvasWidth, canvasHeight);
   canvas.parent('game-container');
   
-  // Style the canvas element directly - this is more reliable than CSS selectors
-  let canvasElt = document.getElementById('defaultCanvas0');
-  if (canvasElt) {
-    // Force center positioning with !important
-    canvasElt.style.margin = '0 auto !important';
-    canvasElt.style.display = 'block !important';
-    canvasElt.style.position = 'static !important';
-    
-    // Center the canvas in the window
-    let x = (windowWidth - width) / 2;
-    let y = (windowHeight - height) / 2;
-    canvasElt.style.left = x + 'px';
-    canvasElt.style.top = y + 'px';
-  }
-  
+  // Initialize game
   player = new Player();
   
   // Create starfield with 150 stars spread throughout the game area
@@ -1035,12 +1023,52 @@ function drawHeartOptimized(x, y, size, points) {
 
 // Function to center the canvas when window is resized
 function windowResized() {
+  // Resize canvas based on new window dimensions
+  let canvasWidth = min(windowWidth - 40, 800);
+  let canvasHeight = min(windowHeight - 200, 600);
+  resizeCanvas(canvasWidth, canvasHeight);
+  
+  // Update canvas positioning
   let canvasElt = document.getElementById('defaultCanvas0');
   if (canvasElt) {
     // Center the canvas in the window
-    let x = (windowWidth - width) / 2;
-    let y = (windowHeight - height) / 2;
-    canvasElt.style.left = x + 'px';
-    canvasElt.style.top = y + 'px';
+    canvasElt.style.margin = '0 auto';
   }
+}
+
+// Function to handle touch controls
+function touchMoved() {
+  // Move player based on touch position
+  // Calculate position relative to canvas center
+  let canvasCenter = width / 2;
+  let touchPosition = touches[0] || { x: mouseX, y: mouseY };
+  
+  // Move only if touch is active
+  if (gameState === "playing") {
+    // Move horizontally towards touch position
+    if (Math.abs(touchPosition.x - player.pos.x) > 10) {
+      if (touchPosition.x > player.pos.x) {
+        player.pos.x += player.speed;
+      } else {
+        player.pos.x -= player.speed;
+      }
+    }
+    
+    // Keep player within bounds
+    player.pos.x = constrain(player.pos.x, player.size, width - player.size);
+  }
+  
+  // Prevent default behavior to avoid scrolling
+  return false;
+}
+
+// Function to handle touch on screen
+function touchStarted() {
+  // Restart game if game over and screen is tapped
+  if (gameState === "gameover") {
+    resetGame();
+  }
+  
+  // Prevent default behavior
+  return false;
 }
