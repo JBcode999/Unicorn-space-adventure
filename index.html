@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Unicorn Space Adventure</title>
+  <script src="p5.js"></script>
+  
+  <!-- Supabase Client Library -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.31.0/dist/umd/supabase.min.js"></script>
+  
+  <!-- Game Scripts -->
+  <script src="sketch.js"></script>
+  <script src="leaderboard.js"></script>
+  
+  <!-- Canvas centering script -->
+  <script>
+    // This script runs after p5.js creates the canvas
+    window.onload = function() {
+      // Function to center the canvas
+      function centerCanvas() {
+        setTimeout(function() {
+          const canvas = document.querySelector('canvas');
+          if (canvas) {
+            // Set canvas position
+            canvas.style.position = 'absolute';
+            canvas.style.left = '50%';
+            canvas.style.top = '50%';
+            canvas.style.transform = 'translate(-50%, -50%)';
+            canvas.style.margin = '0';
+            
+            // Ensure canvas is visible
+            canvas.style.display = 'block';
+          }
+        }, 100); // Small delay to ensure canvas is created
+      }
+      
+      // Center canvas on load
+      centerCanvas();
+      
+      // Center canvas on window resize
+      window.addEventListener('resize', centerCanvas);
+    };
+    
+    // Function to copy wallet address to clipboard
+    function copyWalletAddress() {
+      const walletAddressElement = document.getElementById('wallet-address');
+      const copyButton = document.getElementById('copy-button');
+      const copyText = document.getElementById('copy-text');
+      
+      // Select the text field
+      walletAddressElement.select();
+      walletAddressElement.setSelectionRange(0, 99999); // For mobile devices
+      
+      // Copy the text inside the text field
+      navigator.clipboard.writeText(walletAddressElement.value)
+        .then(() => {
+          // Change button text to "Copied!"
+          copyText.textContent = "Copied!";
+          copyButton.style.background = "linear-gradient(to right, #4caf50, #2e7d32)";
+          
+          // After 2 seconds, change back the button text
+          setTimeout(function() {
+            copyText.textContent = "Copy";
+            copyButton.style.background = "";
+          }, 2000);
+        })
+        .catch(err => {
+          // Fallback for browsers that don't support clipboard API
+          document.execCommand('copy');
+          copyText.textContent = "Copied!";
+          
+          setTimeout(function() {
+            copyText.textContent = "Copy";
+          }, 2000);
+        });
+    }
+  </script>
+  
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Arial Rounded MT Bold', 'Arial', sans-serif;
+      background-color: #111;
+      overflow: hidden;
+      height: 100vh;
+      width: 100vw;
+      position: relative;
+    }
+    
+    canvas, #defaultCanvas0 {
+      display: block !important;
+      position: absolute !important;
+      top: 50% !important;
+      left: 50% !important;
+      transform: translate(-50%, -50%) !important;
+      z-index: 10;
+    }
+    
+    #game-container {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      top: 0;
+      left: 0;
+      overflow: hidden;
+    }
+    
+    /* Reset any p5.js default positioning */
+    main {
+      display: flex !important;
+      justify-content: center !important;
+      align-items: center !important;
+      margin: 0 auto !important;
+      width: 100% !important;
+    }
+    
+    /* Modal Styles */
+    .modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: rgba(0, 0, 0, 0.7);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+    
+    .modal.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    
+    .modal-content {
+      background: linear-gradient(to bottom right, #4a148c, #7b1fa2);
+      color: white;
+      border-radius: 20px;
+      padding: 30px;
+      width: 90%;
+      max-width: 500px;
+      box-shadow: 0 0 30px rgba(200, 100, 255, 0.5);
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .modal-content::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: radial-gradient(circle at center, transparent, rgba(0, 0, 0, 0.3));
+      pointer-events: none;
+    }
+    
+    .modal-title {
+      font-size: 28px;
+      margin-bottom: 20px;
+      text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+    }
+    
+    .score-display {
+      font-size: 40px;
+      font-weight: bold;
+      margin: 20px 0;
+      color: #ffeb3b;
+      text-shadow: 0 0 15px rgba(255, 235, 59, 0.8);
+    }
+    
+    /* Form Styles */
+    .form-group {
+      margin-bottom: 15px;
+      text-align: left;
+    }
+    
+    .form-label {
+      display: block;
+      margin-bottom: 5px;
+      font-size: 16px;
+    }
+    
+    .form-input {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #9c27b0;
+      border-radius: 10px;
+      background-color: rgba(255, 255, 255, 0.9);
+      font-size: 16px;
+      box-sizing: border-box;
+      transition: all 0.3s;
+    }
+    
+    .form-input:focus {
+      outline: none;
+      border-color: #ffeb3b;
+      box-shadow: 0 0 10px rgba(255, 235, 59, 0.6);
+    }
+    
+    /* Button Styles */
+    .button-row {
+      display: flex;
+      justify-content: space-around;
+      margin-top: 25px;
+      flex-wrap: wrap;
+    }
+    
+    .magical-button {
+      background: linear-gradient(to right, #ff4081, #7c4dff);
+      color: white;
+      border: none;
+      border-radius: 50px;
+      padding: 12px 25px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      margin: 5px;
+      transition: all 0.3s;
+      min-width: 120px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+    }
+    
+    .magical-button:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 7px 15px rgba(0, 0, 0, 0.4);
+      background: linear-gradient(to right, #ff5a92, #8d6eff);
+    }
+    
+    .magical-button:active {
+      transform: translateY(1px);
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+    }
+    
+    .share-button {
+      background: linear-gradient(to right, #1da1f2, #0d8ecf);
+    }
+    
+    .leaderboard-button {
+      background: linear-gradient(to right, #ffc107, #ff9800);
+    }
+    
+    .submit-button {
+      background: linear-gradient(to right, #4caf50, #2e7d32);
+    }
+    
+    .play-again-button {
+      background: linear-gradient(to right, #9c27b0, #673ab7);
+    }
+    
+    /* Leaderboard Styles */
+    .leaderboard-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 20px 0;
+      border-radius: 10px;
+      overflow: hidden;
+      color: white;
+    }
+    
+    .leaderboard-table th {
+      background-color: rgba(255, 255, 255, 0.2);
+      padding: 12px;
+      text-align: left;
+    }
+    
+    .leaderboard-table td {
+      padding: 12px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .leaderboard-table tr:hover td {
+      background-color: rgba(255, 255, 255, 0.1);
+    }
+    
+    .rank-cell {
+      font-weight: bold;
+      text-align: center;
+      width: 40px;
+    }
+    
+    .score-cell {
+      font-weight: bold;
+      color: #ffeb3b;
+      text-align: right;
+    }
+    
+    /* Loading Spinner */
+    .spinner {
+      width: 30px;
+      height: 30px;
+      border: 3px solid rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      border-top-color: #fff;
+      animation: spin 1s ease-in-out infinite;
+      margin: 0 auto;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    
+    /* Status Messages */
+    .status-message {
+      margin: 10px 0;
+      padding: 10px;
+      border-radius: 5px;
+      font-weight: bold;
+    }
+    
+    .error-message {
+      background-color: rgba(244, 67, 54, 0.3);
+      color: #f44336;
+    }
+    
+    .success-message {
+      background-color: rgba(76, 175, 80, 0.3);
+      color: #81c784;
+    }
+    
+    /* X Logo */
+    .x-logo {
+      display: inline-block;
+      vertical-align: middle;
+      margin-right: 5px;
+      width: 18px;
+      height: 18px;
+    }
+    
+    /* Donation Panel Styles */
+    #donation-panel {
+      position: absolute;
+      top: 50%;
+      right: 20px;
+      transform: translateY(-50%);
+      width: 300px;
+      background: linear-gradient(to bottom right, #4a148c, #7b1fa2);
+      color: white;
+      border-radius: 20px;
+      padding: 20px;
+      box-shadow: 0 0 30px rgba(200, 100, 255, 0.5);
+      z-index: 50;
+      text-align: center;
+    }
+    
+    .donation-content h2 {
+      font-size: 24px;
+      margin-bottom: 10px;
+      text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+    }
+    
+    .unicorn-divider {
+      margin: 15px 0;
+      position: relative;
+      text-align: center;
+    }
+    
+    .unicorn-divider:before, .unicorn-divider:after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      height: 2px;
+      width: 35%;
+      background: linear-gradient(to right, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.7));
+    }
+    
+    .unicorn-divider:before {
+      left: 0;
+    }
+    
+    .unicorn-divider:after {
+      right: 0;
+      background: linear-gradient(to left, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.7));
+    }
+    
+    .wallet-container {
+      margin: 20px 0;
+    }
+    
+    .wallet-container label {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+    
+    .wallet-copy {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 5px;
+    }
+    
+    #wallet-address {
+      padding: 8px;
+      border-radius: 10px 0 0 10px;
+      border: 2px solid #9c27b0;
+      border-right: none;
+      background: rgba(255, 255, 255, 0.9);
+      color: #333;
+      width: 70%;
+      font-size: 12px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    
+    #copy-button {
+      border-radius: 0 10px 10px 0;
+      font-size: 14px;
+      padding: 8px 15px;
+      margin: 0;
+      min-width: auto;
+    }
+    
+    .thank-you-message {
+      margin-top: 20px;
+      font-style: italic;
+      opacity: 0.9;
+    }
+    
+    /* Make donation panel responsive */
+    @media (max-width: 1200px) {
+      #donation-panel {
+        position: relative;
+        top: auto;
+        right: auto;
+        transform: none;
+        margin: 20px auto;
+        width: 90%;
+        max-width: 300px;
+      }
+    }
+    
+    /* Top Message Box Styles */
+    #message-box {
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 400px;
+      background: linear-gradient(to bottom right, #4a148c, #7b1fa2);
+      color: white;
+      border-radius: 20px;
+      padding: 15px;
+      box-shadow: 0 0 30px rgba(200, 100, 255, 0.5);
+      z-index: 50;
+      text-align: center;
+    }
+    
+    .message-content h2 {
+      font-size: 28px;
+      margin: 0;
+      padding: 5px;
+      text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+      letter-spacing: 1px;
+    }
+    
+    /* Game title styles */
+    .game-title {
+      font-size: 22px;
+      margin: 0;
+      padding: 5px;
+      color: #ffeb3b; /* Golden yellow */
+      text-shadow: 0 0 10px rgba(255, 235, 59, 0.7);
+      font-family: 'Arial Rounded MT Bold', 'Arial', sans-serif;
+      letter-spacing: 2px;
+    }
+    
+    /* Title divider */
+    .title-divider {
+      margin: 5px auto;
+      position: relative;
+      text-align: center;
+      height: 15px;
+    }
+    
+    .title-divider:before, .title-divider:after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      height: 1px;
+      width: 30%;
+      background: linear-gradient(to right, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.6));
+    }
+    
+    .title-divider:before {
+      left: 15%;
+    }
+    
+    .title-divider:after {
+      right: 15%;
+      background: linear-gradient(to left, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.6));
+    }
+    
+    .title-divider span {
+      font-size: 14px;
+      color: #ffeb3b;
+    }
+    
+    /* Sparkle animation for the message */
+    @keyframes sparkle {
+      0% { text-shadow: 0 0 10px rgba(255, 255, 255, 0.5); }
+      50% { text-shadow: 0 0 20px rgba(255, 235, 59, 0.8), 0 0 30px rgba(255, 255, 255, 0.5); }
+      100% { text-shadow: 0 0 10px rgba(255, 255, 255, 0.5); }
+    }
+    
+    /* Color shift animation for the game title */
+    @keyframes colorShift {
+      0% { color: #ffeb3b; text-shadow: 0 0 10px rgba(255, 235, 59, 0.7); }
+      33% { color: #ff80ab; text-shadow: 0 0 10px rgba(255, 128, 171, 0.7); }
+      66% { color: #8c9eff; text-shadow: 0 0 10px rgba(140, 158, 255, 0.7); }
+      100% { color: #ffeb3b; text-shadow: 0 0 10px rgba(255, 235, 59, 0.7); }
+    }
+    
+    .message-content h2 {
+      animation: sparkle 3s infinite ease-in-out;
+    }
+    
+    .game-title {
+      animation: colorShift 8s infinite ease-in-out;
+    }
+    
+    /* Make message box responsive */
+    @media (max-width: 1200px) {
+      #message-box {
+        position: relative;
+        top: auto;
+        left: auto;
+        transform: none;
+        margin: 20px auto;
+        width: 90%;
+        max-width: 400px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="game-container">
+    <!-- Game canvas will be created here by p5.js -->
+  </div>
+  
+  <!-- Top Message Box -->
+  <div id="message-box">
+    <div class="message-content">
+      <h2>Good attracts GOOD</h2>
+      <div class="title-divider">
+        <span>★</span>
+      </div>
+      <h3 class="game-title">Unicorn Space Adventure</h3>
+    </div>
+  </div>
+  
+  <!-- Donation Panel -->
+  <div id="donation-panel">
+    <div class="donation-content">
+      <h2>Support Izzy's College Fund</h2>
+      <div class="unicorn-divider">
+        <span>✨ 🦄 ✨</span>
+      </div>
+      <p>All donations go to Izzy, my daughter, to help fund her college education and music studies.</p>
+      <div class="wallet-container">
+        <label for="wallet-address">Solana Crypto Wallet:</label>
+        <div class="wallet-copy">
+          <input type="text" id="wallet-address" value="AdKgDcP39A7LNBNxMUCjDAJJM6SZXRvf3r7AnSTdZWWa" readonly>
+          <button id="copy-button" class="magical-button" onclick="copyWalletAddress()">
+            <span id="copy-text">Copy</span>
+          </button>
+        </div>
+      </div>
+      <div class="thank-you-message">
+        <p>Thank you for your generosity! ❤️</p>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Leaderboard Form Modal -->
+  <div id="leaderboard-form-modal" class="modal">
+    <div class="modal-content">
+      <h2 class="modal-title">Game Over</h2>
+      <div class="score-display">Score: <span id="final-score">0</span></div>
+      
+      <form id="leaderboard-form">
+        <div class="form-group">
+          <label for="email-input" class="form-label">Email:</label>
+          <input type="email" id="email-input" class="form-input" placeholder="Enter your email" required>
+        </div>
+        
+        <div class="form-group">
+          <label for="name-input" class="form-label">Name (optional):</label>
+          <input type="text" id="name-input" class="form-input" placeholder="Enter your name">
+        </div>
+        
+        <div id="form-status"></div>
+        
+        <div class="button-row">
+          <button type="submit" class="magical-button submit-button" id="submit-score">Submit Score</button>
+          <button type="button" class="magical-button share-button" id="share-to-x">
+            <svg class="x-logo" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" fill="white"/>
+            </svg>
+            Share Score
+          </button>
+          <button type="button" class="magical-button leaderboard-button" id="view-leaderboard">View Leaderboard</button>
+          <button type="button" class="magical-button play-again-button" id="play-again">Play Again</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  
+  <!-- Leaderboard Display Modal -->
+  <div id="leaderboard-display-modal" class="modal">
+    <div class="modal-content">
+      <h2 class="modal-title">🏆 Leaderboard 🏆</h2>
+      
+      <div id="leaderboard-loading" class="spinner"></div>
+      <div id="leaderboard-error" class="status-message error-message" style="display: none;"></div>
+      
+      <table id="leaderboard-table" class="leaderboard-table" style="display: none;">
+        <thead>
+          <tr>
+            <th>Rank</th>
+            <th>Player</th>
+            <th>Score</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="leaderboard-body">
+          <!-- Leaderboard entries will be inserted here -->
+        </tbody>
+      </table>
+      
+      <div class="button-row">
+        <button type="button" class="magical-button play-again-button" id="close-leaderboard">Close</button>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
