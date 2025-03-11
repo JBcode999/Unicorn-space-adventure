@@ -15,6 +15,135 @@
   
   <!-- Canvas centering script -->
   <script>
+    // Add this global copy function right at the top of the script
+    function copyTextToClipboard(text, buttonElement, textElement) {
+      // Make absolutely sure we have the required elements
+      if (!buttonElement || !textElement) {
+        console.error("Missing button or text element for copy feedback");
+        return false;
+      }
+      
+      console.log("Attempting to copy text:", text);
+      
+      // Method 1: Using Clipboard API directly with the text
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        try {
+          navigator.clipboard.writeText(text)
+            .then(function() {
+              console.log("Clipboard API success");
+              showCopySuccess();
+              return true;
+            })
+            .catch(function(err) {
+              console.error("Clipboard API error:", err);
+              // Try fallback methods
+              return copyTextFallback();
+            });
+        } catch(err) {
+          console.error("Clipboard API exception:", err);
+          return copyTextFallback();
+        }
+      } else {
+        console.log("Clipboard API not available, using fallback");
+        return copyTextFallback();
+      }
+      
+      // Method 2: Using execCommand with a temporary element
+      function copyTextFallback() {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed'; // Prevent scrolling to the element
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        
+        try {
+          textarea.focus();
+          textarea.select();
+          const success = document.execCommand('copy');
+          document.body.removeChild(textarea);
+          console.log("execCommand fallback:", success ? "success" : "failed");
+          
+          if (success) {
+            showCopySuccess();
+            return true;
+          } else {
+            showCopyFailure("Failed to copy");
+            return false;
+          }
+        } catch(err) {
+          document.body.removeChild(textarea);
+          console.error("execCommand error:", err);
+          showCopyFailure("Error copying");
+          return false;
+        }
+      }
+      
+      // Method 3: Simple copy from the input field directly (last resort)
+      function copyWithInputSelection() {
+        try {
+          const input = document.createElement('input');
+          input.value = text;
+          document.body.appendChild(input);
+          input.select();
+          input.setSelectionRange(0, 99999);
+          const success = document.execCommand('copy');
+          document.body.removeChild(input);
+          
+          if (success) {
+            showCopySuccess();
+            return true;
+          } else {
+            showCopyFailure("Couldn't copy");
+            return false;
+          }
+        } catch(err) {
+          console.error("Input selection copy error:", err);
+          showCopyFailure("Copy unavailable");
+          return false;
+        }
+      }
+      
+      function showCopySuccess() {
+        textElement.textContent = "Copied!";
+        buttonElement.style.background = "linear-gradient(to right, #4caf50, #2e7d32)";
+        setTimeout(function() {
+          textElement.textContent = "Copy";
+          buttonElement.style.background = "";
+        }, 2000);
+      }
+      
+      function showCopyFailure(message) {
+        textElement.textContent = message || "Failed!";
+        buttonElement.style.background = "linear-gradient(to right, #f44336, #d32f2f)";
+        setTimeout(function() {
+          textElement.textContent = "Copy";
+          buttonElement.style.background = "";
+        }, 2000);
+      }
+    }
+
+    // Define copy functions globally so they can be accessed by HTML onclick attributes
+    function copyWalletAddress() {
+      const walletAddress = document.getElementById('wallet-address').value;
+      const copyButton = document.getElementById('copy-button');
+      const copyText = document.getElementById('copy-text');
+      copyTextToClipboard(walletAddress, copyButton, copyText);
+    }
+    
+    function copyModalWalletAddress(event) {
+      // Stop event propagation to prevent form submission
+      if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      
+      const walletAddress = document.getElementById('modal-wallet-address').value;
+      const copyButton = document.getElementById('modal-copy-button');
+      const copyText = document.getElementById('modal-copy-text');
+      copyTextToClipboard(walletAddress, copyButton, copyText);
+      return false; // Prevent form submission
+    }
+
     // This script runs after p5.js creates the canvas
     window.onload = function() {
       // Function to center the canvas
@@ -130,74 +259,6 @@
           });
         }
       });
-      
-      // Function to copy wallet address to clipboard
-      function copyWalletAddress() {
-        const walletAddressElement = document.getElementById('wallet-address');
-        const copyButton = document.getElementById('copy-button');
-        const copyText = document.getElementById('copy-text');
-        
-        // Select the text field
-        walletAddressElement.select();
-        walletAddressElement.setSelectionRange(0, 99999); // For mobile devices
-        
-        // Copy the text inside the text field
-        navigator.clipboard.writeText(walletAddressElement.value)
-          .then(() => {
-            // Change button text to "Copied!"
-            copyText.textContent = "Copied!";
-            copyButton.style.background = "linear-gradient(to right, #4caf50, #2e7d32)";
-            
-            // After 2 seconds, change back the button text
-            setTimeout(function() {
-              copyText.textContent = "Copy";
-              copyButton.style.background = "";
-            }, 2000);
-          })
-          .catch(err => {
-            // Fallback for browsers that don't support clipboard API
-            document.execCommand('copy');
-            copyText.textContent = "Copied!";
-            
-            setTimeout(function() {
-              copyText.textContent = "Copy";
-            }, 2000);
-          });
-      }
-      
-      // Function to copy modal wallet address to clipboard
-      function copyModalWalletAddress() {
-        const walletAddressElement = document.getElementById('modal-wallet-address');
-        const copyButton = document.getElementById('modal-copy-button');
-        const copyText = document.getElementById('modal-copy-text');
-        
-        // Select the text field
-        walletAddressElement.select();
-        walletAddressElement.setSelectionRange(0, 99999); // For mobile devices
-        
-        // Copy the text inside the text field
-        navigator.clipboard.writeText(walletAddressElement.value)
-          .then(() => {
-            // Change button text to "Copied!"
-            copyText.textContent = "Copied!";
-            copyButton.style.background = "linear-gradient(to right, #4caf50, #2e7d32)";
-            
-            // After 2 seconds, change back the button text
-            setTimeout(function() {
-              copyText.textContent = "Copy";
-              copyButton.style.background = "";
-            }, 2000);
-          })
-          .catch(err => {
-            // Fallback for browsers that don't support clipboard API
-            document.execCommand('copy');
-            copyText.textContent = "Copied!";
-            
-            setTimeout(function() {
-              copyText.textContent = "Copy";
-            }, 2000);
-          });
-      }
     };
   </script>
   
@@ -1032,30 +1093,30 @@
           <button type="button" class="magical-button leaderboard-button" id="view-leaderboard">View Leaderboard</button>
           <button type="button" class="magical-button play-again-button" id="play-again">Play Again</button>
         </div>
+      </form>
+      
+      <!-- Donation Panel in Game Over Modal - Moved outside the form -->
+      <div class="modal-donation-panel">
+        <div class="unicorn-divider">
+          <span>✨ 🦄 ✨</span>
+        </div>
+        <h3>Support Izzy's College Fund</h3>
+        <p>Enjoyed the game? Consider donating to Izzy's college education fund!</p>
         
-        <!-- Donation Panel in Game Over Modal -->
-        <div class="modal-donation-panel">
-          <div class="unicorn-divider">
-            <span>✨ 🦄 ✨</span>
-          </div>
-          <h3>Support Izzy's College Fund</h3>
-          <p>Enjoyed the game? Consider donating to Izzy's college education fund!</p>
-          
-          <div class="wallet-container modal-wallet">
-            <label for="modal-wallet-address">Solana Crypto Wallet:</label>
-            <div class="wallet-copy">
-              <input type="text" id="modal-wallet-address" value="AdKgDcP39A7LNBNxMUCjDAJJM6SZXRvf3r7AnSTdZWWa" readonly>
-              <button id="modal-copy-button" class="magical-button" onclick="copyModalWalletAddress()">
-                <span id="modal-copy-text">Copy</span>
-              </button>
-            </div>
-          </div>
-          
-          <div class="thank-you-message">
-            <p>Thank you for your generosity! ❤️</p>
+        <div class="wallet-container modal-wallet">
+          <label for="modal-wallet-address">Solana Crypto Wallet:</label>
+          <div class="wallet-copy">
+            <input type="text" id="modal-wallet-address" value="AdKgDcP39A7LNBNxMUCjDAJJM6SZXRvf3r7AnSTdZWWa" readonly>
+            <button id="modal-copy-button" class="magical-button" type="button" onclick="copyModalWalletAddress(event)">
+              <span id="modal-copy-text">Copy</span>
+            </button>
           </div>
         </div>
-      </form>
+        
+        <div class="thank-you-message">
+          <p>Thank you for your generosity! ❤️</p>
+        </div>
+      </div>
     </div>
   </div>
   
