@@ -164,6 +164,40 @@
             }, 2000);
           });
       }
+      
+      // Function to copy modal wallet address to clipboard
+      function copyModalWalletAddress() {
+        const walletAddressElement = document.getElementById('modal-wallet-address');
+        const copyButton = document.getElementById('modal-copy-button');
+        const copyText = document.getElementById('modal-copy-text');
+        
+        // Select the text field
+        walletAddressElement.select();
+        walletAddressElement.setSelectionRange(0, 99999); // For mobile devices
+        
+        // Copy the text inside the text field
+        navigator.clipboard.writeText(walletAddressElement.value)
+          .then(() => {
+            // Change button text to "Copied!"
+            copyText.textContent = "Copied!";
+            copyButton.style.background = "linear-gradient(to right, #4caf50, #2e7d32)";
+            
+            // After 2 seconds, change back the button text
+            setTimeout(function() {
+              copyText.textContent = "Copy";
+              copyButton.style.background = "";
+            }, 2000);
+          })
+          .catch(err => {
+            // Fallback for browsers that don't support clipboard API
+            document.execCommand('copy');
+            copyText.textContent = "Copied!";
+            
+            setTimeout(function() {
+              copyText.textContent = "Copy";
+            }, 2000);
+          });
+      }
     };
   </script>
   
@@ -850,6 +884,81 @@
     #leaderboard-form-modal.active {
       visibility: visible;
     }
+    
+    /* Modal Donation Panel Styles */
+    .modal-donation-panel {
+      margin-top: 30px;
+      padding: 20px;
+      border-top: 1px solid rgba(255, 255, 255, 0.2);
+      text-align: center;
+      background: rgba(76, 9, 121, 0.3);
+      border-radius: 15px;
+      box-shadow: 0 0 15px rgba(200, 100, 255, 0.3) inset;
+    }
+    
+    .modal-donation-panel h3 {
+      font-size: 22px;
+      margin: 10px 0;
+      color: #ffeb3b;
+      text-shadow: 0 0 10px rgba(255, 235, 59, 0.5);
+    }
+    
+    .modal-donation-panel p {
+      font-size: 16px;
+      margin-bottom: 15px;
+      opacity: 0.9;
+      line-height: 1.4;
+    }
+    
+    .modal-wallet {
+      max-width: 400px;
+      margin: 15px auto;
+    }
+    
+    /* Highlight the wallet input in the modal */
+    #modal-wallet-address {
+      background-color: rgba(255, 255, 255, 0.95);
+      font-weight: 500;
+      color: #333;
+      border: 2px solid #ffeb3b;
+    }
+    
+    /* Animation for the donation panel to draw attention */
+    @keyframes gentlePulse {
+      0% { opacity: 0.9; transform: scale(1); box-shadow: 0 0 15px rgba(200, 100, 255, 0.2) inset; }
+      50% { opacity: 1; transform: scale(1.01); box-shadow: 0 0 20px rgba(200, 100, 255, 0.4) inset; }
+      100% { opacity: 0.9; transform: scale(1); box-shadow: 0 0 15px rgba(200, 100, 255, 0.2) inset; }
+    }
+    
+    .modal-donation-panel {
+      animation: gentlePulse 4s infinite ease-in-out;
+    }
+    
+    /* Mobile-specific adjustments for the donation panel */
+    @media (max-width: 768px) {
+      .modal-donation-panel {
+        padding: 15px 10px;
+        margin-top: 25px;
+      }
+      
+      .modal-donation-panel h3 {
+        font-size: 20px;
+      }
+      
+      .modal-donation-panel p {
+        font-size: 14px;
+        margin-bottom: 12px;
+      }
+      
+      .modal-wallet label {
+        font-size: 14px;
+      }
+      
+      /* Hide the side donation panel on mobile when game over is shown */
+      body.gameover-shown #donation-panel {
+        display: none !important;
+      }
+    }
   </style>
 </head>
 <body>
@@ -922,6 +1031,29 @@
           </button>
           <button type="button" class="magical-button leaderboard-button" id="view-leaderboard">View Leaderboard</button>
           <button type="button" class="magical-button play-again-button" id="play-again">Play Again</button>
+        </div>
+        
+        <!-- Donation Panel in Game Over Modal -->
+        <div class="modal-donation-panel">
+          <div class="unicorn-divider">
+            <span>✨ 🦄 ✨</span>
+          </div>
+          <h3>Support Izzy's College Fund</h3>
+          <p>Enjoyed the game? Consider donating to Izzy's college education fund!</p>
+          
+          <div class="wallet-container modal-wallet">
+            <label for="modal-wallet-address">Solana Crypto Wallet:</label>
+            <div class="wallet-copy">
+              <input type="text" id="modal-wallet-address" value="AdKgDcP39A7LNBNxMUCjDAJJM6SZXRvf3r7AnSTdZWWa" readonly>
+              <button id="modal-copy-button" class="magical-button" onclick="copyModalWalletAddress()">
+                <span id="modal-copy-text">Copy</span>
+              </button>
+            </div>
+          </div>
+          
+          <div class="thank-you-message">
+            <p>Thank you for your generosity! ❤️</p>
+          </div>
         </div>
       </form>
     </div>

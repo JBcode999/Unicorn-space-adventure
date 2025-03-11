@@ -139,6 +139,9 @@ function showLeaderboardForm(finalScore) {
     canvas.style.pointerEvents = 'none';
   }
   
+  // Add class to body to indicate game over is shown (for responsive styling)
+  document.body.classList.add('gameover-shown');
+  
   // Make modal interactive
   leaderboardFormModal.classList.add('active');
   
@@ -465,6 +468,9 @@ function handlePlayAgain() {
   // Hide modals
   leaderboardFormModal.classList.remove('active');
   leaderboardDisplayModal.classList.remove('active');
+  
+  // Remove gameover class from body
+  document.body.classList.remove('gameover-shown');
   
   // Re-hide email and name inputs
   if (emailInput) {
