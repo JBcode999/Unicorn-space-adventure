@@ -12,16 +12,6 @@ let messages = []; // Array for temporary on-screen messages
 let sparkles = []; // Array for sparkle effects
 let shootingStars = []; // Array for shooting stars
 
-// Scale factor for responsive design
-let SCALE_FACTOR = 1;
-
-// Touch controls
-let touchIsActive = false;
-let touchX = 0;
-let touchY = 0;
-let lastTouchX = 0;
-let lastTouchY = 0;
-
 // Timing for special effects
 let nextShootingStarTime = 0;
 
@@ -32,29 +22,26 @@ function preload() {
 }
 
 function setup() {
-  // Create a responsive canvas that fills most of the screen but maintains aspect ratio
-  let canvasWidth, canvasHeight;
+  // Create canvas with specific dimensions
+  let canvas = createCanvas(800, 600);
   
-  // Target aspect ratio is 4:3 (800:600)
-  const targetRatio = 800 / 600;
-  
-  // Determine size based on window dimensions
-  if (windowWidth / windowHeight > targetRatio) {
-    // Window is wider than our target ratio
-    canvasHeight = min(windowHeight * 0.9, 600); // 90% of window height, max 600px
-    canvasWidth = canvasHeight * targetRatio;
-  } else {
-    // Window is taller than our target ratio
-    canvasWidth = min(windowWidth * 0.9, 800); // 90% of window width, max 800px
-    canvasHeight = canvasWidth / targetRatio;
-  }
-  
-  // Create the canvas with calculated dimensions
-  let canvas = createCanvas(canvasWidth, canvasHeight);
+  // Center canvas both using parent and CSS positioning
   canvas.parent('game-container');
   
-  // Scale game elements based on canvas size
-  scaleGameElements(canvasWidth, canvasHeight);
+  // Style the canvas element directly - this is more reliable than CSS selectors
+  let canvasElt = document.getElementById('defaultCanvas0');
+  if (canvasElt) {
+    // Force center positioning with !important
+    canvasElt.style.margin = '0 auto !important';
+    canvasElt.style.display = 'block !important';
+    canvasElt.style.position = 'static !important';
+    
+    // Center the canvas in the window
+    let x = (windowWidth - width) / 2;
+    let y = (windowHeight - height) / 2;
+    canvasElt.style.left = x + 'px';
+    canvasElt.style.top = y + 'px';
+  }
   
   player = new Player();
   
@@ -78,31 +65,35 @@ function draw() {
   // Update game difficulty based on distance traveled
   updateGameDifficulty();
   
+  // Draw and update starfield with vertical scrolling
+  updateStarfield();
+  
+  // Check if it's time for a shooting star
+  if (frameCount >= nextShootingStarTime && random() > 0.7) {
+    createShootingStar();
+    nextShootingStarTime = frameCount + random(180, 360); // Next one in 3-6 seconds
+  }
+  
+  // Update and draw background effects
+  updateBackgroundEffects();
+  
   if (gameState === "playing") {
-    // Update starfield for parallax scrolling effect
-    updateStarfield();
-    
-    // Add occasional background effects like shooting stars
-    updateBackgroundEffects();
-    
-    // Update the player's position
-    player.update();
-    
-    // Spawn new gems and asteroids
-    spawnGem();
-    spawnAsteroid();
-    
-    // Draw player
-    player.show();
-    
     // Update and draw rainbow trail
     for (let i = rainbowTrail.length - 1; i >= 0; i--) {
       rainbowTrail[i].show();
-      let isGone = rainbowTrail[i].update();
-      if (isGone) {
-        rainbowTrail.splice(i, 1);
+      if (rainbowTrail[i].update()) {
+        rainbowTrail.splice(i, 1); // Remove faded particles
       }
     }
+    
+    // Spawn gems and asteroids with rates that increase with level
+    // More asteroids and fewer gems at higher levels
+    if (frameCount % max(5, 60 - level/2) === 0 && random() > 0.3 - level/200) spawnGem();
+    if (frameCount % max(3, 45 - level/2) === 0 && random() > 0.2 - level/200) spawnAsteroid();
+    
+    // Update and display player
+    player.update();
+    player.show();
     
     // Update and manage gems
     for (let i = gems.length - 1; i >= 0; i--) {
@@ -111,14 +102,14 @@ function draw() {
       
       // Check for collision with player
       if (player.hits(gems[i])) {
-        // Add score
+        // Add to score
         score += gems[i].value;
         
-        // Create sparkle effect at collection point
-        createSparkleEffect(gems[i].pos.x, gems[i].pos.y);
+        // Create sparkle effect at gem position
+        createSparkleEffect(gems[i].pos.x, gems[i].pos.y, gems[i].color);
         
-        // Show floating score
-        addFloatingScore(gems[i].pos.x, gems[i].pos.y, "+" + gems[i].value);
+        // Add floating score text
+        addFloatingScore(gems[i].pos.x, gems[i].pos.y, gems[i].value);
         
         // Remove the collected gem
         gems.splice(i, 1);
@@ -154,9 +145,6 @@ function draw() {
         asteroids.splice(i, 1);
       }
     }
-    
-    // Show game instructions at the beginning
-    showInstructions();
   } else if (gameState === "gameover") {
     // Still display player, gems and asteroids
     player.show();
@@ -165,33 +153,27 @@ function draw() {
     
     // Enhanced Game over screen with score highlight
     textAlign(CENTER);
-    textSize(40 * SCALE_FACTOR);
+    textSize(40);
     fill(255, 0, 0);
-    text("GAME OVER", width / 2, height / 2 - 40 * SCALE_FACTOR);
+    text("GAME OVER", width / 2, height / 2 - 40);
     
     // Highlight score with pulsing effect
     let pulseAmount = sin(frameCount * 0.1) * 20 + 200; // Pulsing value between 180-220
-    textSize(38 * SCALE_FACTOR);
+    textSize(38);
     fill(255, pulseAmount, 0); // Pulsing yellow-orange
-    text(`SCORE: ${score}`, width / 2, height / 2 + 10 * SCALE_FACTOR);
+    text(`SCORE: ${score}`, width / 2, height / 2 + 10);
     
     // Add a glow effect around score
     for (let i = 6; i > 0; i--) {
       fill(255, pulseAmount, 0, 20 - i * 3);
-      textSize((38 + i * 1.5) * SCALE_FACTOR);
-      text(`SCORE: ${score}`, width / 2, height / 2 + 10 * SCALE_FACTOR);
+      textSize(38 + i * 1.5);
+      text(`SCORE: ${score}`, width / 2, height / 2 + 10);
     }
     
-    // Show restart instructions for desktop/mobile
-    textSize(20 * SCALE_FACTOR);
+    // Just show restart instruction
+    textSize(20);
     fill(255);
-    
-    // Check if on mobile or desktop and show appropriate instruction
-    if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
-      text("Tap Screen to Try Again", width / 2, height / 2 + 70 * SCALE_FACTOR);
-    } else {
-      text("Press R to Try Again", width / 2, height / 2 + 70 * SCALE_FACTOR);
-    }
+    text("Press R to Try Again", width / 2, height / 2 + 70);
   }
   
   // Update and display sparkle effects
@@ -320,76 +302,91 @@ function createExplosionEffect(x, y) {
   }
 }
 
-// Player class with support for both mouse and touch controls
+// Player class: A triangular spaceship
 class Player {
   constructor() {
-    this.pos = createVector(width / 2, height - 100 * SCALE_FACTOR);
+    this.pos = createVector(width / 2, height - 100); // Start near bottom
     this.vel = createVector(0, 0);
-    this.size = 25 * SCALE_FACTOR;
-    this.speed = 5 * SCALE_FACTOR;
-    this.hitRadius = this.size * 0.8;
-    this.lastPos = this.pos.copy();
+    this.size = 25; // Larger size for the unicorn
+    this.speed = 5; // Movement speed
+    this.hitRadius = this.size * 0.8; // Collision radius
+    this.lastPos = this.pos.copy(); // Store last position for movement detection
+    this.trailTimer = 0; // Add timer for controlling trail frequency
   }
   
   update() {
-    // Store last position for trail effect
+    // Store last position to check if moved
     this.lastPos = this.pos.copy();
     
-    // Handle mouse input for desktop
-    if (mouseIsPressed && !touchIsActive) {
-      // Calculate vector pointing from player to mouse
-      let target = createVector(mouseX, mouseY);
-      let direction = p5.Vector.sub(target, this.pos);
-      
-      // Only move if mouse is a certain distance away
-      if (direction.mag() > this.size / 2) {
-        direction.normalize();
-        direction.mult(this.speed);
-        this.vel.lerp(direction, 0.2); // Smooth movement
-      } else {
-        this.vel.mult(0.8); // Slow down when close to target
-      }
-    } 
-    // Handle touch input for mobile
-    else if (touchIsActive) {
-      // Calculate touch movement direction
-      let touchDirection = createVector(touchX - lastTouchX, touchY - lastTouchY);
-      
-      // Apply movement if touch has moved enough
-      if (touchDirection.mag() > 1) {
-        touchDirection.normalize();
-        touchDirection.mult(this.speed);
-        this.vel.lerp(touchDirection, 0.2); // Smooth movement
-      } else {
-        this.vel.mult(0.8); // Slow down when no movement
-      }
-      
-      // Update last touch position
-      lastTouchX = touchX;
-      lastTouchY = touchY;
-    } 
-    // When no input, gradually slow down
-    else {
-      this.vel.mult(0.95);
-    }
+    // Allow movement in all four directions
+    this.vel.x = 0;
+    this.vel.y = 0;
+    
+    if (keyIsDown(LEFT_ARROW)) this.vel.x = -this.speed;
+    if (keyIsDown(RIGHT_ARROW)) this.vel.x = this.speed;
+    if (keyIsDown(UP_ARROW)) this.vel.y = -this.speed;
+    if (keyIsDown(DOWN_ARROW)) this.vel.y = this.speed;
     
     // Apply velocity
     this.pos.add(this.vel);
     
-    // Add rainbow trail effect when moving
-    if (this.vel.mag() > 0.5) {
-      let trailCount = floor(map(this.vel.mag(), 0, this.speed*2, 1, 3));
-      for (let i = 0; i < trailCount; i++) {
-        rainbowTrail.push(new RainbowParticle(
-          this.pos.x - this.vel.x * random(0.5, 2), 
-          this.pos.y - this.vel.y * random(0.5, 2)
-        ));
+    // Keep player within screen bounds
+    this.pos.x = constrain(this.pos.x, this.size, width - this.size);
+    this.pos.y = constrain(this.pos.y, this.size, height - this.size);
+    
+    // Generate rainbow trail particles if moved, but with more magical patterns
+    if (dist(this.pos.x, this.pos.y, this.lastPos.x, this.lastPos.y) > 0.5) {
+      // Increment timer and only add particles on certain frames
+      this.trailTimer++;
+      
+      // Create particles in a pattern based on movement
+      if (this.trailTimer % 2 === 0) { // Every other frame
+        // Basic movement trail
+        let particleCount = floor(random(1, 3)); // 1-2 particles
+        for (let i = 0; i < particleCount; i++) {
+          rainbowTrail.push(
+            new RainbowParticle(
+              this.pos.x + random(-this.size * 0.2, this.size * 0.2), 
+              this.pos.y + this.size * 0.6 // From bottom of unicorn
+            )
+          );
+        }
+        
+        // Add special trail effects occasionally without affecting performance
+        if (this.trailTimer % 8 === 0) { // Every 8 frames, create a special pattern
+          // Choose a pattern based on direction of movement
+          if (abs(this.vel.x) > abs(this.vel.y)) {
+            // Horizontal movement - create horizontal sparkle pattern
+            let sparkleSpacing = this.vel.x > 0 ? -4 : 4; // Space based on direction
+            for (let i = 0; i < 3; i++) { // 3 particles in a row
+              rainbowTrail.push(
+                new RainbowParticle(
+                  this.pos.x + sparkleSpacing * i, 
+                  this.pos.y + this.size * 0.6 + random(-2, 2)
+                )
+              );
+            }
+          } else {
+            // Vertical movement - create vertical sparkle pattern
+            let sparkleSpacing = this.vel.y > 0 ? -4 : 4; // Space based on direction
+            for (let i = 0; i < 3; i++) { // 3 particles in a column
+              rainbowTrail.push(
+                new RainbowParticle(
+                  this.pos.x + random(-2, 2), 
+                  this.pos.y + this.size * 0.6 + sparkleSpacing * i
+                )
+              );
+            }
+          }
+        }
       }
     }
     
-    // Constrain player position to canvas
-    this.pos.x = constrain(this.pos.x, this.size, width - this.size);
-    this.pos.y = constrain(this.pos.y, this.size, height - this.size);
+    // Limit the maximum number of trail particles
+    if (rainbowTrail.length > 60) { // Increased slightly from 50 to allow for more magic
+      // Remove oldest particles if we exceed the limit
+      rainbowTrail.splice(0, rainbowTrail.length - 60);
+    }
   }
   
   show() {
@@ -462,51 +459,61 @@ class Player {
 // Gem class: Collectible circles
 class Gem {
   constructor() {
-    this.size = 15 * SCALE_FACTOR;
-    this.hitRadius = this.size * 0.8;
-    this.randomPosition();
-    this.determineDirection();
+    this.size = random(15, 25);
+    // Scale gem value with level - higher levels give more valuable gems
+    let levelMultiplier = 1 + (level * 0.1); // 10% more points per level
+    this.value = floor(map(this.size, 15, 25, 5, 15) * levelMultiplier);
     
-    // Randomly select a gemstone color from predefined choices
-    this.colorIndex = floor(random(0, 6));
-    this.colors = [
-      color(255, 0, 255),  // Magenta
-      color(0, 255, 255),  // Cyan
-      color(255, 255, 0),  // Yellow
-      color(0, 255, 0),    // Green
-      color(255, 0, 127),  // Pink
-      color(127, 0, 255)   // Purple
-    ];
+    // Create vibrant, magical colors
+    let hue = random(360); // Random hue around color wheel
+    colorMode(HSB, 360, 100, 100, 255);
+    this.color = color(
+      hue, 
+      random(70, 100), // High saturation 
+      random(80, 100)  // High brightness
+    );
+    this.glowColor = color(
+      (hue + 30) % 360, // Complementary color for glow
+      80, 
+      100
+    );
+    colorMode(RGB, 255, 255, 255, 255); // Switch back to RGB
     
-    // Value based on color
-    this.value = floor(random(5, 15)); // Base score value
-    
-    // Add some visual variety
+    this.pos = this.randomPosition();
+    this.direction = this.determineDirection();
     this.rotationSpeed = random(-0.05, 0.05);
-    this.rotation = random(TWO_PI);
-    this.pulseSpeed = random(0.03, 0.06);
-    this.pulseOffset = random(TWO_PI);
-    this.glowSize = 0;
+    this.angle = random(TWO_PI);
+    this.pulseAmount = 0;
+    this.pulseSpeed = random(0.03, 0.08);
+    this.glowing = true; // All jellybeans glow
+    this.sparkleTime = random(20, 60); // Add occasional sparkle
   }
   
-  // Randomly position the gem on the screen
   randomPosition() {
-    // Choose a random edge of the screen
-    const edge = floor(random(4));
+    // Randomly choose to spawn from any of the four sides
+    let spawnSide = floor(random(4)); // 0 = top, 1 = right, 2 = bottom, 3 = left
     
-    switch(edge) {
+    switch(spawnSide) {
       case 0: // Top
-        this.pos = createVector(random(width), -this.size);
-        break;
+        return createVector(
+          random(0, width),
+          -this.size
+        );
       case 1: // Right
-        this.pos = createVector(width + this.size, random(height));
-        break;
+        return createVector(
+          width + this.size,
+          random(0, height)
+        );
       case 2: // Bottom
-        this.pos = createVector(random(width), height + this.size);
-        break;
+        return createVector(
+          random(0, width),
+          height + this.size
+        );
       case 3: // Left
-        this.pos = createVector(-this.size, random(height));
-        break;
+    return createVector(
+          -this.size,
+          random(0, height)
+        );
     }
   }
   
@@ -529,20 +536,20 @@ class Gem {
       this.pos.add(this.direction);
       
       // Rotate the jellybean
-      this.rotation += this.rotationSpeed;
+      this.angle += this.rotationSpeed;
       
       // Update pulse animation
-      this.glowSize = sin(frameCount * this.pulseSpeed) * 0.2;
+      this.pulseAmount = sin(frameCount * this.pulseSpeed) * 0.2;
       
       // Occasional sparkle
-      if (frameCount % 10 < 2 && random() > 0.7) {
+      if (frameCount % this.sparkleTime < 2 && random() > 0.7) {
         // Add a small sparkle
         let sparkle = {
           x: this.pos.x + random(-this.size/2, this.size/2),
           y: this.pos.y + random(-this.size/3, this.size/3),
           size: random(2, 4),
           alpha: 255,
-          color: this.colors[this.colorIndex],
+          color: this.glowColor,
           display: function() {
             noStroke();
             fill(red(this.color), green(this.color), blue(this.color), this.alpha);
@@ -585,15 +592,15 @@ class Gem {
     push();
     translate(this.pos.x, this.pos.y);
     // Rotate jelly beans by calculated angle
-    rotate(this.rotation);
+    rotate(this.angle);
     
     // Draw glow effect if jellybean is glowing
-    if (this.glowSize > 0) {
+    if (this.glowing) {
       for (let i = 3; i > 0; i--) {
         noStroke();
-        fill(red(this.colors[this.colorIndex]), green(this.colors[this.colorIndex]), blue(this.colors[this.colorIndex]), 100 - i * 20);
+        fill(red(this.glowColor), green(this.glowColor), blue(this.glowColor), 100 - i * 20);
         // Pulse the size for magical effect
-        let pulseSize = 1 + this.glowSize + i * 0.1;
+        let pulseSize = 1 + this.pulseAmount + i * 0.1;
         
         // Outer glow - jellybean shape
         ellipseMode(CENTER);
@@ -607,7 +614,7 @@ class Gem {
     
     // Draw main jellybean body (elongated rounded rect)
     noStroke();
-    fill(this.colors[this.colorIndex]);
+    fill(this.color);
     ellipseMode(CENTER);
     ellipse(0, 0, this.size * 1.8, this.size * 0.8);
     
@@ -635,46 +642,43 @@ class Gem {
 // Asteroid class: Irregular obstacles
 class Asteroid {
   constructor() {
-    this.size = 30 * SCALE_FACTOR;
-    this.hitRadius = this.size * 0.8;
-    this.randomPosition();
-    this.determineDirection();
+    this.pos = this.randomPosition();
+    // Make asteroids faster and more unpredictable at higher levels
+    let baseSpeed = 0.8 + (level/30); // Speed increases with level
+    this.size = random(20, 40);
+    this.rotation = random(-0.05, 0.05);
+    this.angle = 0;
+    this.direction = this.determineDirection();
     
-    // Visual properties for asteroid
-    this.rotation = random(TWO_PI);
-    this.rotationSpeed = random(-0.05, 0.05);
-    this.shapeSeed = random(1000); // Seed for generating the same rough shape
-    this.numVertices = floor(random(7, 12)); // Number of vertices for the asteroid shape
-    this.roughness = []; // Array to store roughness values for each vertex
-    
-    // Generate the roughness values for consistent shape
-    for (let i = 0; i < this.numVertices; i++) {
-      this.roughness.push(random(0.7, 1.3)); // How much each point extends from center
-    }
-    
-    // Color with some variation
-    this.baseColor = color(150, 150, 150);
-    this.hueVariation = random(-20, 20);
+    // Apply level-based speed multiplier
+    this.direction.mult(baseSpeed);
   }
   
-  // Randomly position the asteroid outside the screen
   randomPosition() {
-    // Choose a random edge of the screen
-    const edge = floor(random(4));
+    // Randomly choose to spawn from any of the four sides
+    let spawnSide = floor(random(4)); // 0 = top, 1 = right, 2 = bottom, 3 = left
     
-    switch(edge) {
+    switch(spawnSide) {
       case 0: // Top
-        this.pos = createVector(random(width), -this.size);
-        break;
+        return createVector(
+          random(0, width),
+          -this.size * 2
+        );
       case 1: // Right
-        this.pos = createVector(width + this.size, random(height));
-        break;
+        return createVector(
+          width + this.size * 2,
+          random(0, height)
+        );
       case 2: // Bottom
-        this.pos = createVector(random(width), height + this.size);
-        break;
+        return createVector(
+          random(0, width),
+          height + this.size * 2
+        );
       case 3: // Left
-        this.pos = createVector(-this.size, random(height));
-        break;
+    return createVector(
+          -this.size * 2,
+          random(0, height)
+        );
     }
   }
   
@@ -697,7 +701,7 @@ class Asteroid {
       this.pos.add(this.direction);
       
       // Rotate asteroid
-      this.rotation += this.rotationSpeed;
+      this.angle += this.rotation;
     }
     
     // Check if asteroid is off-screen on the opposite side
@@ -709,8 +713,8 @@ class Asteroid {
   show() {
     push();
     translate(this.pos.x, this.pos.y);
-    rotate(this.rotation);
-    fill(this.baseColor);
+    rotate(this.angle);
+    fill(100, 80, 60); // Grayish-brown
     noStroke();
     beginShape();
     for (let i = 0; i < TWO_PI; i += PI / 6) {
@@ -724,20 +728,16 @@ class Asteroid {
 
 // Spawn functions
 function spawnGem() {
-  if (random() < 0.05 + (level * 0.005)) { // Slightly more gems at higher levels
-    gems.push(new Gem());
-  }
+  gems.push(new Gem());
 }
 
 function spawnAsteroid() {
-  if (random() < 0.02 + (level * 0.002)) { // Slightly more asteroids at higher levels
-    asteroids.push(new Asteroid());
-  }
+  asteroids.push(new Asteroid());
 }
 
-// Handle restart with both keyboard and touch
+// Handle restart and sound toggle
 function keyPressed() {
-  if ((key === 'r' || key === 'R') && gameState === "gameover") {
+  if (key === 'r' && gameState === "gameover") {
     resetGame();
   }
 }
@@ -749,14 +749,11 @@ function resetGame() {
   score = 0;
   distanceTraveled = 0;
   level = 1;
-  scrollSpeed = 2 * SCALE_FACTOR;
+  scrollSpeed = 2;
   gameState = "playing";
   rainbowTrail = [];
   sparkles = [];
   messages = [];
-  
-  // Reset touch control variables
-  touchIsActive = false;
 }
 
 function updateGameDifficulty() {
@@ -884,28 +881,131 @@ function updateBackgroundEffects() {
 class RainbowParticle {
   constructor(x, y) {
     this.pos = createVector(x, y);
-    this.vel = createVector(random(-0.5, 0.5), random(0.5, 1.5));
-    this.size = random(5, 15) * SCALE_FACTOR;
-    this.alpha = 255;
-    this.color = color(
-      random(200, 255), 
-      random(100, 255), 
-      random(150, 255)
-    );
+    this.vel = createVector(random(-0.7, 0.7), random(0.5, 2.0));
+    this.size = random(5, 15); // Slightly smaller particles
+    this.alpha = 255; // Start fully opaque
+    
+    // More magical color selection - true rainbow colors
+    let colorChoice = floor(random(7)); // Choose one of 7 rainbow colors
+    switch(colorChoice) {
+      case 0: this.color = color(255, 50, 50); break;   // Red
+      case 1: this.color = color(255, 150, 50); break;  // Orange
+      case 2: this.color = color(255, 255, 50); break;  // Yellow
+      case 3: this.color = color(50, 255, 50); break;   // Green
+      case 4: this.color = color(50, 150, 255); break;  // Blue
+      case 5: this.color = color(150, 50, 255); break;  // Indigo
+      case 6: this.color = color(255, 100, 255); break; // Pink/Violet
+    }
+    
+    this.glowing = random() > 0.7; // 30% chance to be a glowing particle - increased from 10% for more magic
+    this.spin = random(-0.05, 0.05); // Reduced spin speed
+    this.angle = random(TWO_PI);
+    this.shape = random() > 0.5 ? floor(random(2)) + 1 : 0; // More stars/hearts (50% chance), rest circles
+    
+    // Special magical properties
+    this.twinkle = random() > 0.8; // 20% chance to twinkle
+    this.twinkleRate = random(0.05, 0.15); // How fast it twinkles
+    this.specialTrail = random() > 0.9; // 10% chance to have tiny trailing particles
+    this.birthTime = frameCount; // Remember when particle was created
+    
+    // Pre-calculate heart shape if needed
+    if (this.shape === 2) {
+      this.heartPoints = [];
+      for (let a = 0; a < TWO_PI; a += 0.2) {
+        let r = (16 * pow(sin(a), 3)) * this.size * 0.04;
+        this.heartPoints.push({
+          x: r * cos(a),
+          y: -r * sin(a)
+        });
+      }
+    }
   }
   
   update() {
     this.pos.add(this.vel);
-    this.alpha -= 5;
-    this.size *= 0.97;
-    return this.alpha <= 0;
+    this.alpha -= 6; // Fade out at medium rate (between 4 and 8)
+    this.size *= 0.96; // Shrink at medium rate (between 0.95 and 0.97)
+    this.angle += this.spin;
+    
+    // Add subtle magical movement - gentle swaying
+    if (frameCount % 2 === 0) { // Only do every other frame for performance
+      this.vel.x += sin((frameCount - this.birthTime) * 0.1) * 0.02;
+    }
+    
+    // Create mini trailing particles for special particles
+    if (this.specialTrail && frameCount % 4 === 0 && random() > 0.5) { // Limit frequency
+      sparkles.push({
+        x: this.pos.x + random(-3, 3),
+        y: this.pos.y + random(-3, 3),
+        size: random(1, 2),
+        xSpeed: random(-0.5, 0.5),
+        ySpeed: random(-0.5, 0.5),
+        alpha: 150,
+        color: this.color,
+        display: function() {
+          noStroke();
+          fill(red(this.color), green(this.color), blue(this.color), this.alpha);
+          ellipse(this.x, this.y, this.size, this.size);
+          this.x += this.xSpeed;
+          this.y += this.ySpeed;
+          this.alpha -= 15; // Fade quickly
+        }
+      });
+    }
+    
+    return this.alpha <= 0; // Return true if particle should be removed
   }
   
   show() {
+    push();
+    translate(this.pos.x, this.pos.y);
+    rotate(this.angle);
+    
     noStroke();
+    // Add twinkle effect for twinkling particles
+    let brightnessMultiplier = 1;
+    if (this.twinkle) {
+      brightnessMultiplier = 0.7 + sin((frameCount - this.birthTime) * this.twinkleRate) * 0.3;
+    }
+    
+    // Set the color with transparency and brightness variation
     let c = this.color;
-    fill(red(c), green(c), blue(c), this.alpha);
-    ellipse(this.pos.x, this.pos.y, this.size, this.size);
+    let displayAlpha = this.alpha * brightnessMultiplier;
+    
+    // Draw glow effect for glowing particles
+    if (this.glowing) {
+      for (let i = 2; i > 0; i--) { // Two layers of glow
+        fill(red(c), green(c), blue(c), displayAlpha * 0.3);
+        let glowSize = this.size + i * 5;
+        
+        if (this.shape === 0) {
+          // Circle with glow
+          ellipse(0, 0, glowSize, glowSize);
+        } else if (this.shape === 1) {
+          // Star with glow
+          drawStar(0, 0, glowSize, glowSize/2, 5);
+        } else {
+          // Heart with glow
+          drawHeartOptimized(0, 0, glowSize, this.heartPoints);
+        }
+      }
+    }
+    
+    // Draw the main particle
+    fill(red(c), green(c), blue(c), displayAlpha);
+    
+    if (this.shape === 0) {
+      // Circle
+      ellipse(0, 0, this.size, this.size);
+    } else if (this.shape === 1) {
+      // Star
+      drawStar(0, 0, this.size, this.size/2, 5);
+    } else {
+      // Heart
+      drawHeartOptimized(0, 0, this.size, this.heartPoints);
+    }
+    
+    pop();
   }
 }
 
@@ -933,124 +1033,14 @@ function drawHeartOptimized(x, y, size, points) {
   endShape(CLOSE);
 }
 
-// Function to handle window resizing
+// Function to center the canvas when window is resized
 function windowResized() {
-  // Recalculate canvas size
-  let canvasWidth, canvasHeight;
-  const targetRatio = 800 / 600;
-  
-  if (windowWidth / windowHeight > targetRatio) {
-    canvasHeight = min(windowHeight * 0.9, 600);
-    canvasWidth = canvasHeight * targetRatio;
-  } else {
-    canvasWidth = min(windowWidth * 0.9, 800);
-    canvasHeight = canvasWidth / targetRatio;
-  }
-  
-  // Resize the canvas
-  resizeCanvas(canvasWidth, canvasHeight);
-  
-  // Scale game elements based on new canvas size
-  scaleGameElements(canvasWidth, canvasHeight);
-  
-  // Position the canvas element
   let canvasElt = document.getElementById('defaultCanvas0');
   if (canvasElt) {
-    canvasElt.style.left = '50%';
-    canvasElt.style.top = '50%';
-  }
-}
-
-// Scale game elements based on canvas size
-function scaleGameElements(canvasWidth, canvasHeight) {
-  // Base scale factor on original 800x600 design
-  SCALE_FACTOR = min(canvasWidth / 800, canvasHeight / 600);
-  
-  // Player size and speed adjustments
-  if (player) {
-    player.size = 25 * SCALE_FACTOR;
-    player.speed = 5 * SCALE_FACTOR;
-    player.hitRadius = player.size * 0.8;
-  }
-  
-  // Adjust global game settings
-  scrollSpeed = 2 * SCALE_FACTOR; // Base scroll speed
-  
-  // Update existing gems with new scale
-  for (let gem of gems) {
-    gem.size = 15 * SCALE_FACTOR;
-    gem.hitRadius = gem.size * 0.8;
-  }
-  
-  // Update existing asteroids with new scale
-  for (let asteroid of asteroids) {
-    asteroid.size = 30 * SCALE_FACTOR;
-    asteroid.hitRadius = asteroid.size * 0.8;
-  }
-}
-
-// Touch started event
-function touchStarted() {
-  // Don't process touch events in game over state
-  if (gameState !== "playing") return;
-  
-  touchIsActive = true;
-  touchX = mouseX;
-  touchY = mouseY;
-  lastTouchX = touchX;
-  lastTouchY = touchY;
-  
-  // Prevent default behavior to avoid scrolling on mobile
-  return false;
-}
-
-// Touch moved event
-function touchMoved() {
-  if (gameState !== "playing") return;
-  
-  touchX = mouseX;
-  touchY = mouseY;
-  
-  // Prevent default behavior to avoid scrolling on mobile
-  return false;
-}
-
-// Touch ended event
-function touchEnded() {
-  touchIsActive = false;
-  
-  // If game is over, touching the screen will restart
-  if (gameState === "gameover") {
-    resetGame();
-  }
-  
-  // Prevent default behavior
-  return false;
-}
-
-// Show instructions at game start
-function showInstructions() {
-  if (frameCount < 180) { // Show for first 3 seconds
-    textAlign(CENTER);
-    textSize(20 * SCALE_FACTOR);
-    fill(255);
-    
-    let yPos = height - 100 * SCALE_FACTOR;
-    
-    // Detect if on mobile or desktop
-    if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
-      text("Touch and drag to move the unicorn", width/2, yPos);
-    } else {
-      text("Click and move mouse to control the unicorn", width/2, yPos);
-    }
-    
-    // Add a second line of instructions
-    text("Collect gems and avoid asteroids!", width/2, yPos + 30 * SCALE_FACTOR);
-    
-    // Fade out instructions
-    if (frameCount > 120) {
-      let alpha = map(frameCount, 120, 180, 255, 0);
-      fill(255, alpha);
-    }
+    // Center the canvas in the window
+    let x = (windowWidth - width) / 2;
+    let y = (windowHeight - height) / 2;
+    canvasElt.style.left = x + 'px';
+    canvasElt.style.top = y + 'px';
   }
 }
