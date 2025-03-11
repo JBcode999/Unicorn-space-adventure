@@ -344,7 +344,7 @@ class Player {
           rainbowTrail.push(
             new RainbowParticle(
               this.pos.x + random(-this.size * 0.2, this.size * 0.2), 
-              this.pos.y + this.size * 0.6 // From bottom of unicorn
+              this.pos.y + this.size * 0.9 // Moved from 0.6 to 0.9 to position at very bottom (fart position)
             )
           );
         }
@@ -359,7 +359,7 @@ class Player {
               rainbowTrail.push(
                 new RainbowParticle(
                   this.pos.x + sparkleSpacing * i, 
-                  this.pos.y + this.size * 0.6 + random(-2, 2)
+                  this.pos.y + this.size * 0.9 + random(-2, 2) // Moved from 0.6 to 0.9 (fart position)
                 )
               );
             }
@@ -370,7 +370,7 @@ class Player {
               rainbowTrail.push(
                 new RainbowParticle(
                   this.pos.x + random(-2, 2), 
-                  this.pos.y + this.size * 0.6 + sparkleSpacing * i
+                  this.pos.y + this.size * 0.9 + sparkleSpacing * i // Moved from 0.6 to 0.9 (fart position)
                 )
               );
             }
