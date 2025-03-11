@@ -167,6 +167,53 @@
     };
   </script>
   
+  <script>
+    // Mobile keyboard display helper
+    window.forceShowKeyboard = function(inputElement) {
+      if (!inputElement) return false;
+      
+      // Try different approaches to show keyboard
+      try {
+        // Focus with timeout approach
+        setTimeout(function() {
+          inputElement.focus();
+          
+          // iOS requires additional click after focus
+          if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+            inputElement.click();
+          }
+        }, 300);
+        
+        // For Android, try tap simulation
+        if (/Android/i.test(navigator.userAgent)) {
+          // Create and dispatch touch events
+          const touchEvent = document.createEvent('TouchEvent');
+          const touchObj = new Touch({
+            identifier: Date.now(),
+            target: inputElement,
+            clientX: 10,
+            clientY: 10,
+            radiusX: 2.5,
+            radiusY: 2.5,
+            rotationAngle: 0,
+            force: 1
+          });
+          
+          touchEvent.initTouchEvent('touchstart', true, true, window, 0, 
+            0, 0, 10, 10, false, false, false, false, 
+            [touchObj], [touchObj], [touchObj]);
+          
+          inputElement.dispatchEvent(touchEvent);
+        }
+        
+        return true;
+      } catch (e) {
+        console.error("Error forcing keyboard:", e);
+        return false;
+      }
+    };
+  </script>
+  
   <style>
     body {
       margin: 0;
@@ -785,6 +832,24 @@
         -webkit-overflow-scrolling: touch;
       }
     }
+    
+    /* Hide sensitive info during gameplay */
+    .hidden-during-play {
+      opacity: 0;
+      position: absolute;
+      left: -9999px;
+      top: -9999px;
+      pointer-events: none;
+    }
+    
+    /* Ensure leaderboard form is only visible when active */
+    #leaderboard-form-modal {
+      visibility: hidden;
+    }
+    
+    #leaderboard-form-modal.active {
+      visibility: visible;
+    }
   </style>
 </head>
 <body>
@@ -834,21 +899,21 @@
       <h2 class="modal-title">Game Over</h2>
       <div class="score-display">Score: <span id="final-score">0</span></div>
       
-      <form id="leaderboard-form">
+      <form id="leaderboard-form" onsubmit="return false;">
         <div class="form-group">
           <label for="email-input" class="form-label">Email:</label>
-          <input type="email" id="email-input" class="form-input" placeholder="Enter your email" required autocapitalize="off" autocomplete="email" inputmode="email">
+          <input type="email" id="email-input" class="form-input" placeholder="Enter your email" required autocapitalize="off" autocomplete="email" inputmode="email" onclick="this.focus();" onfocus="this.click();" data-lpignore="true">
         </div>
         
         <div class="form-group">
           <label for="name-input" class="form-label">Name (optional):</label>
-          <input type="text" id="name-input" class="form-input" placeholder="Enter your name" autocapitalize="words" autocomplete="name">
+          <input type="text" id="name-input" class="form-input" placeholder="Enter your name" autocapitalize="words" autocomplete="name" onclick="this.focus();" onfocus="this.click();" data-lpignore="true">
         </div>
         
         <div id="form-status"></div>
         
         <div class="button-row">
-          <button type="submit" class="magical-button submit-button" id="submit-score">Submit Score</button>
+          <button type="button" class="magical-button submit-button" id="submit-score" onclick="document.getElementById('leaderboard-form').dispatchEvent(new Event('submit'));">Submit Score</button>
           <button type="button" class="magical-button share-button" id="share-to-x">
             <svg class="x-logo" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
               <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" fill="white"/>

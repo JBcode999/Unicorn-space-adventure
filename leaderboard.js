@@ -86,12 +86,36 @@ document.addEventListener('DOMContentLoaded', () => {
     name: !!nameInput
   });
   
+  // Make sure email input is completely hidden/empty during gameplay
+  if (emailInput) {
+    emailInput.value = '';
+    emailInput.classList.add('hidden-during-play');
+  }
+  
+  if (nameInput) {
+    nameInput.value = '';
+    nameInput.classList.add('hidden-during-play');
+  }
+  
   // Add event listeners
-  document.getElementById('leaderboard-form').addEventListener('submit', handleScoreSubmit);
+  document.getElementById('leaderboard-form').addEventListener('submit', function(event) {
+    // Prevent default form submission behavior
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    // Call our score submission function
+    handleScoreSubmit(event);
+  });
   document.getElementById('share-to-x').addEventListener('click', handleShareToX);
   document.getElementById('view-leaderboard').addEventListener('click', showLeaderboard);
   document.getElementById('play-again').addEventListener('click', handlePlayAgain);
   document.getElementById('close-leaderboard').addEventListener('click', closeLeaderboard);
+  
+  // Fix for mobile submit button
+  document.getElementById('submit-score').addEventListener('click', function() {
+    handleScoreSubmit(new Event('submit'));
+  });
 });
 
 // Show leaderboard form modal when game ends
@@ -107,11 +131,13 @@ function showLeaderboardForm(finalScore) {
   // Make modal interactive
   leaderboardFormModal.classList.add('active');
   
-  // Ensure form inputs are enabled and focusable
+  // Remove hidden class from inputs
   if (emailInput) {
-    setTimeout(() => {
-      emailInput.focus();
-    }, 300); // Small delay to ensure modal is fully visible
+    emailInput.classList.remove('hidden-during-play');
+  }
+  
+  if (nameInput) {
+    nameInput.classList.remove('hidden-during-play');
   }
   
   // Try to load email from localStorage if available
@@ -125,6 +151,47 @@ function showLeaderboardForm(finalScore) {
   if (savedName) {
     nameInput.value = savedName;
   }
+  
+  // Force keyboard to appear on mobile - wait for modal to fully appear
+  setTimeout(() => {
+    // Try using our specialized keyboard helper
+    if (window.forceShowKeyboard && emailInput) {
+      window.forceShowKeyboard(emailInput);
+    } else if (emailInput) {
+      // Fallback to direct focus method
+      emailInput.focus();
+      
+      // Second attempt: try to trigger native behavior
+      if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+        // For iOS/Android, try to force the keyboard
+        emailInput.blur();  // First blur
+        emailInput.click(); // Then click
+        emailInput.focus(); // Then focus again
+
+        // Create a temporary input if needed
+        if (!document.activeElement || document.activeElement !== emailInput) {
+          console.log("Attempting aggressive keyboard display technique");
+          const tempInput = document.createElement('input');
+          tempInput.style.position = 'absolute';
+          tempInput.style.top = '0';
+          tempInput.style.left = '0';
+          tempInput.style.opacity = '0';
+          tempInput.style.height = '0';
+          tempInput.setAttribute('type', 'text');
+          
+          document.body.appendChild(tempInput);
+          tempInput.focus();
+          tempInput.click();
+          
+          setTimeout(() => {
+            tempInput.remove();
+            emailInput.focus();
+            emailInput.click();
+          }, 100);
+        }
+      }
+    }
+  }, 500);
 }
 
 // Make the function globally accessible
@@ -132,7 +199,15 @@ window.showLeaderboardForm = showLeaderboardForm;
 
 // Handle score submission
 async function handleScoreSubmit(event) {
-  event.preventDefault();
+  // Prevent default form submission if event was passed
+  if (event && event.preventDefault) {
+    event.preventDefault();
+  }
+  
+  // Clear any existing keyboard focus to hide keyboard
+  if (document.activeElement && document.activeElement.blur) {
+    document.activeElement.blur();
+  }
   
   const email = emailInput.value.trim();
   const name = nameInput.value.trim() || 'Anonymous Unicorn';
@@ -336,6 +411,17 @@ function shareLeaderboardEntry(entry) {
 function closeLeaderboard() {
   leaderboardDisplayModal.classList.remove('active');
   
+  // Re-hide email and name inputs
+  if (emailInput) {
+    emailInput.classList.add('hidden-during-play');
+    emailInput.value = '';
+  }
+  
+  if (nameInput) {
+    nameInput.classList.add('hidden-during-play');
+    nameInput.value = '';
+  }
+  
   // Re-enable canvas interaction if game is not over
   if (getGameState() !== "gameover") {
     const canvas = document.querySelector('canvas');
@@ -350,6 +436,17 @@ function handlePlayAgain() {
   // Hide modals
   leaderboardFormModal.classList.remove('active');
   leaderboardDisplayModal.classList.remove('active');
+  
+  // Re-hide email and name inputs
+  if (emailInput) {
+    emailInput.classList.add('hidden-during-play');
+    emailInput.value = '';
+  }
+  
+  if (nameInput) {
+    nameInput.classList.add('hidden-during-play');
+    nameInput.value = '';
+  }
   
   // Re-enable canvas interaction
   const canvas = document.querySelector('canvas');
