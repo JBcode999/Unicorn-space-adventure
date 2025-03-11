@@ -344,9 +344,14 @@ class Player {
           rainbowTrail.push(
             new RainbowParticle(
               this.pos.x + random(-this.size * 0.2, this.size * 0.2), 
-              this.pos.y + this.size * 0.9 // Moved from 0.6 to 0.9 to position at very bottom (fart position)
+              this.pos.y + this.size * 0.9 // Positioned at very bottom (fart position)
             )
           );
+        }
+        
+        // Add occasional burst for more visibility
+        if (this.trailTimer % 15 === 0) {
+          createRainbowBurst(this.pos.x, this.pos.y + this.size * 0.9);
         }
         
         // Add special trail effects occasionally without affecting performance
@@ -383,6 +388,19 @@ class Player {
     if (rainbowTrail.length > 60) { // Increased slightly from 50 to allow for more magic
       // Remove oldest particles if we exceed the limit
       rainbowTrail.splice(0, rainbowTrail.length - 60);
+    }
+    
+    // Ensure rainbow trail is created on mobile too
+    if (frameCount % 2 === 0) {
+      rainbowTrail.push(
+        new RainbowParticle(
+          this.pos.x + random(-this.size * 0.2, this.size * 0.2), 
+          this.pos.y + this.size * 0.9 // Position at bottom of unicorn (fart position)
+        )
+      );
+      if (rainbowTrail.length > 25) {
+        rainbowTrail.shift();
+      }
     }
   }
   
@@ -880,9 +898,15 @@ function updateBackgroundEffects() {
 
 // Rainbow Particle class for the unicorn's trail
 class RainbowParticle {
-  constructor(x, y) {
+  constructor(x, y, isBurst = false) {
     this.pos = createVector(x, y);
     this.vel = createVector(random(-0.7, 0.7), random(0.5, 2.0));
+    
+    // Add stronger velocity for burst particles
+    if (isBurst) {
+      this.vel = createVector(random(-2, 2), random(-1, 3));
+    }
+    
     this.size = random(5, 15); // Slightly smaller particles
     this.alpha = 255; // Start fully opaque
     
@@ -1079,9 +1103,21 @@ function touchMoved() {
       player.pos.x = constrain(player.pos.x, player.size, width - player.size);
       player.pos.y = constrain(player.pos.y, player.size, height - player.size);
       
-      // Ensure rainbow trail is created on mobile too
+      // Create rainbow trail with stronger burst effect for mobile
       if (frameCount % 2 === 0) {
-        rainbowTrail.push(new RainbowParticle(player.pos.x, player.pos.y));
+        // Regular trail particles
+        rainbowTrail.push(
+          new RainbowParticle(
+            player.pos.x + random(-player.size * 0.2, player.size * 0.2), 
+            player.pos.y + player.size * 0.9 // Position at bottom of unicorn (fart position)
+          )
+        );
+        
+        // Occasional rainbow burst for more visibility (fart burst)
+        if (frameCount % 10 === 0 && (abs(deltaX) > 1 || abs(deltaY) > 1)) {
+          createRainbowBurst(player.pos.x, player.pos.y + player.size * 0.9);
+        }
+        
         if (rainbowTrail.length > 25) {
           rainbowTrail.shift();
         }
@@ -1114,4 +1150,19 @@ function touchStarted() {
   }
   // Return true to allow default behavior (like scrolling) outside the canvas
   return true;
+}
+
+// Function to create a burst of rainbow particles (fart burst)
+function createRainbowBurst(x, y) {
+  // Create a burst of 5-10 particles
+  let burstCount = floor(random(5, 10));
+  for (let i = 0; i < burstCount; i++) {
+    rainbowTrail.push(
+      new RainbowParticle(
+        x + random(-10, 10),
+        y,
+        true // Mark as burst particle for stronger velocity
+      )
+    );
+  }
 }
