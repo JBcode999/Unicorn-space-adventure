@@ -24,6 +24,16 @@ let leaderboardBody;
 let leaderboardLoading;
 let leaderboardError;
 
+// Function to get game state from sketch.js
+function getGameState() {
+  // Try to access the gameState variable from the global scope
+  if (typeof window.gameState !== 'undefined') {
+    return window.gameState;
+  }
+  // Fallback to assuming game over if we're showing leaderboard
+  return 'gameover';
+}
+
 // Initialize leaderboard functionality when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
   // Initialize Supabase client if keys are provided
@@ -87,7 +97,22 @@ document.addEventListener('DOMContentLoaded', () => {
 // Show leaderboard form modal when game ends
 function showLeaderboardForm(finalScore) {
   finalScoreElement.textContent = finalScore;
+  
+  // Ensure canvas doesn't capture events
+  const canvas = document.querySelector('canvas');
+  if (canvas) {
+    canvas.style.pointerEvents = 'none';
+  }
+  
+  // Make modal interactive
   leaderboardFormModal.classList.add('active');
+  
+  // Ensure form inputs are enabled and focusable
+  if (emailInput) {
+    setTimeout(() => {
+      emailInput.focus();
+    }, 300); // Small delay to ensure modal is fully visible
+  }
   
   // Try to load email from localStorage if available
   const savedEmail = localStorage.getItem('unicornGameEmail');
@@ -192,6 +217,12 @@ function handleShareToX() {
 async function showLeaderboard() {
   // Hide leaderboard form modal
   leaderboardFormModal.classList.remove('active');
+  
+  // Ensure canvas doesn't capture events
+  const canvas = document.querySelector('canvas');
+  if (canvas) {
+    canvas.style.pointerEvents = 'none';
+  }
   
   // Show leaderboard display modal
   leaderboardDisplayModal.classList.add('active');
@@ -304,16 +335,36 @@ function shareLeaderboardEntry(entry) {
 // Close the leaderboard modal
 function closeLeaderboard() {
   leaderboardDisplayModal.classList.remove('active');
+  
+  // Re-enable canvas interaction if game is not over
+  if (getGameState() !== "gameover") {
+    const canvas = document.querySelector('canvas');
+    if (canvas) {
+      canvas.style.pointerEvents = 'auto';
+    }
+  }
 }
 
-// Handle play again button click
+// Handle play again button
 function handlePlayAgain() {
   // Hide modals
   leaderboardFormModal.classList.remove('active');
   leaderboardDisplayModal.classList.remove('active');
   
-  // Reset the game
-  resetGame();
+  // Re-enable canvas interaction
+  const canvas = document.querySelector('canvas');
+  if (canvas) {
+    canvas.style.pointerEvents = 'auto';
+  }
+  
+  // Reset game
+  if (typeof resetGame === 'function') {
+    resetGame();
+  } else {
+    console.error('resetGame function not available');
+    // Fallback: reload the page
+    window.location.reload();
+  }
 }
 
 // Helper function to show form status messages

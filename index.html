@@ -43,57 +43,128 @@
       window.addEventListener('resize', centerCanvas);
       
       // Fix touch interaction with modals
-      const modals = document.querySelectorAll('.modal');
+      const modals = document.querySelectorAll('.modal-content');
       modals.forEach(modal => {
-        modal.addEventListener('touchmove', function(e) {
-          // Allow default scrolling behavior inside modals
+        // Stop propagation for all events on modal content
+        ['touchstart', 'touchmove', 'touchend', 'click'].forEach(eventType => {
+          modal.addEventListener(eventType, function(e) {
+            e.stopPropagation();
+          }, {passive: false});
+        });
+      });
+      
+      // Fix inputs and buttons
+      const formElements = document.querySelectorAll('input, button, .form-input, .magical-button');
+      formElements.forEach(el => {
+        // Ensure clicks on form elements work
+        ['touchstart', 'touchend', 'click'].forEach(eventType => {
+          el.addEventListener(eventType, function(e) {
+            e.stopPropagation();
+          }, {passive: false});
+        });
+        
+        // Add touch-action manipulation
+        el.style.touchAction = 'manipulation';
+      });
+      
+      // Special handling for form inputs to ensure text entry works
+      document.querySelectorAll('input[type="text"], input[type="email"]').forEach(input => {
+        // Prevent p5.js from capturing keyboard events when inputs are focused
+        input.addEventListener('focus', function() {
+          // Disable any global keyPressed handlers from p5.js
+          if (window.keyIsPressed) window.keyIsPressed = false;
+          
+          // Set a flag to indicate an input is focused
+          window.inputFocused = true;
+          
+          // Make sure canvas doesn't capture events
+          const canvas = document.querySelector('canvas');
+          if (canvas) canvas.style.pointerEvents = 'none';
+        });
+        
+        input.addEventListener('blur', function() {
+          // Reset the flag when input loses focus
+          window.inputFocused = false;
+          
+          // Only re-enable canvas events if game is still playing
+          if (window.gameState !== 'gameover') {
+            const canvas = document.querySelector('canvas');
+            if (canvas) canvas.style.pointerEvents = 'auto';
+          }
+        });
+        
+        // Make absolutely sure the input is receiving events
+        input.addEventListener('click', function(e) {
+          // Focus the input
+          setTimeout(() => this.focus(), 0);
           e.stopPropagation();
-        }, {passive: true}); // Set to passive to improve scrolling performance
+        });
       });
       
-      // Add touch action handling
+      // Make sure canvas doesn't capture events when modals are active
       document.addEventListener('DOMContentLoaded', function() {
-        // Apply touch-action manipulation to all interactive elements
-        const interactiveElements = document.querySelectorAll('button, input, .modal-content');
-        interactiveElements.forEach(el => {
-          el.style.touchAction = 'manipulation';
-        });
+        const canvas = document.querySelector('canvas');
+        const activeModals = document.querySelectorAll('.modal.active');
+        
+        if (canvas) {
+          // Check if any modal is active, and if so, prevent canvas from receiving pointer events
+          function updateCanvasInteractivity() {
+            const activeModals = document.querySelectorAll('.modal.active');
+            if (activeModals.length > 0) {
+              canvas.style.pointerEvents = 'none';
+            } else {
+              canvas.style.pointerEvents = 'auto';
+            }
+          }
+          
+          // Run initially
+          updateCanvasInteractivity();
+          
+          // Add mutation observer to watch for modal state changes
+          const observer = new MutationObserver(updateCanvasInteractivity);
+          document.querySelectorAll('.modal').forEach(modal => {
+            observer.observe(modal, { 
+              attributes: true, 
+              attributeFilter: ['class'] 
+            });
+          });
+        }
       });
+      
+      // Function to copy wallet address to clipboard
+      function copyWalletAddress() {
+        const walletAddressElement = document.getElementById('wallet-address');
+        const copyButton = document.getElementById('copy-button');
+        const copyText = document.getElementById('copy-text');
+        
+        // Select the text field
+        walletAddressElement.select();
+        walletAddressElement.setSelectionRange(0, 99999); // For mobile devices
+        
+        // Copy the text inside the text field
+        navigator.clipboard.writeText(walletAddressElement.value)
+          .then(() => {
+            // Change button text to "Copied!"
+            copyText.textContent = "Copied!";
+            copyButton.style.background = "linear-gradient(to right, #4caf50, #2e7d32)";
+            
+            // After 2 seconds, change back the button text
+            setTimeout(function() {
+              copyText.textContent = "Copy";
+              copyButton.style.background = "";
+            }, 2000);
+          })
+          .catch(err => {
+            // Fallback for browsers that don't support clipboard API
+            document.execCommand('copy');
+            copyText.textContent = "Copied!";
+            
+            setTimeout(function() {
+              copyText.textContent = "Copy";
+            }, 2000);
+          });
+      }
     };
-    
-    // Function to copy wallet address to clipboard
-    function copyWalletAddress() {
-      const walletAddressElement = document.getElementById('wallet-address');
-      const copyButton = document.getElementById('copy-button');
-      const copyText = document.getElementById('copy-text');
-      
-      // Select the text field
-      walletAddressElement.select();
-      walletAddressElement.setSelectionRange(0, 99999); // For mobile devices
-      
-      // Copy the text inside the text field
-      navigator.clipboard.writeText(walletAddressElement.value)
-        .then(() => {
-          // Change button text to "Copied!"
-          copyText.textContent = "Copied!";
-          copyButton.style.background = "linear-gradient(to right, #4caf50, #2e7d32)";
-          
-          // After 2 seconds, change back the button text
-          setTimeout(function() {
-            copyText.textContent = "Copy";
-            copyButton.style.background = "";
-          }, 2000);
-        })
-        .catch(err => {
-          // Fallback for browsers that don't support clipboard API
-          document.execCommand('copy');
-          copyText.textContent = "Copied!";
-          
-          setTimeout(function() {
-            copyText.textContent = "Copy";
-          }, 2000);
-        });
-    }
   </script>
   
   <style>
@@ -232,7 +303,7 @@
       background-color: rgba(0, 0, 0, 0.85); /* Darker background for better visibility */
       display: flex;
       justify-content: center;
-      align-items: center;
+      align-items: flex-start; /* Align to top for better mobile usability */
       z-index: 2000; /* Higher z-index to ensure visibility */
       opacity: 0;
       pointer-events: none;
@@ -244,6 +315,18 @@
     .modal.active {
       opacity: 1;
       pointer-events: auto;
+    }
+    
+    /* Reset any stacking context issues */
+    @media (max-width: 768px) {
+      .modal.active input,
+      .modal.active button,
+      .modal.active .form-input,
+      .modal.active .magical-button {
+        pointer-events: auto !important;
+        position: relative !important;
+        z-index: 3000 !important; /* Even higher z-index for form elements */
+      }
     }
     
     .modal-content {
@@ -260,6 +343,7 @@
       max-height: 80vh; /* Limit height to allow scrolling */
       margin: 50px auto; /* Add margin to ensure visibility */
       -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+      z-index: 2100; /* Higher than modal background */
     }
     
     .modal-content::before {
@@ -270,7 +354,7 @@
       right: 0;
       bottom: 0;
       background: radial-gradient(circle at center, transparent, rgba(0, 0, 0, 0.3));
-      pointer-events: none;
+      pointer-events: none; /* Ensure this doesn't block clicks */
     }
     
     .modal-title {
@@ -291,6 +375,8 @@
     .form-group {
       margin-bottom: 15px;
       text-align: left;
+      position: relative; /* Ensure proper stacking context */
+      z-index: 2; /* Higher than modal-content::before */
     }
     
     .form-label {
@@ -308,6 +394,8 @@
       font-size: 16px;
       box-sizing: border-box;
       transition: all 0.3s;
+      position: relative; /* Ensure proper stacking context */
+      z-index: 3; /* Higher than form-group */
     }
     
     .form-input:focus {
@@ -322,6 +410,8 @@
       justify-content: space-around;
       margin-top: 25px;
       flex-wrap: wrap;
+      position: relative; /* Ensure proper stacking context */
+      z-index: 4; /* Higher than form elements */
     }
     
     .magical-button {
@@ -338,6 +428,8 @@
       min-width: 120px;
       box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
       min-height: 44px;
+      position: relative; /* Ensure proper stacking context */
+      z-index: 5; /* Higher than button-row */
     }
     
     .magical-button:hover {
@@ -638,6 +730,61 @@
     .magical-button {
       min-height: 44px; /* Apple's recommended min size */
     }
+    
+    /* Form Input Fixes for Mobile */
+    @media (max-width: 768px) {
+      .form-input {
+        -webkit-user-select: text !important;
+        user-select: text !important;
+        -webkit-appearance: none;
+        position: relative;
+        z-index: 9999 !important; /* Extremely high z-index */
+      }
+      
+      .modal-content .form-group {
+        margin-bottom: 20px;
+        z-index: 9998 !important;
+      }
+      
+      /* Ensure modals appear above everything */
+      .modal.active {
+        z-index: 9990 !important;
+      }
+      
+      .modal-content {
+        z-index: 9991 !important;
+      }
+      
+      /* Force inputs to capture keyboard */
+      input, textarea, [contenteditable] {
+        -webkit-tap-highlight-color: rgba(0,0,0,0.3);
+        -webkit-user-select: text !important;
+        user-select: text !important;
+      }
+    }
+    
+    /* iOS Specific Fixes */
+    @supports (-webkit-touch-callout: none) {
+      /* iOS-specific CSS */
+      input, textarea {
+        font-size: 16px !important; /* Prevent zoom */
+        -webkit-user-select: auto !important;
+        user-select: auto !important;
+        pointer-events: auto !important;
+      }
+      
+      .modal-content {
+        -webkit-transform: translateZ(0);
+        transform: translateZ(0);
+      }
+      
+      /* Fix position:fixed issues on iOS */
+      .modal.active {
+        position: absolute;
+        height: 100%;
+        -webkit-overflow-scrolling: touch;
+      }
+    }
   </style>
 </head>
 <body>
@@ -690,12 +837,12 @@
       <form id="leaderboard-form">
         <div class="form-group">
           <label for="email-input" class="form-label">Email:</label>
-          <input type="email" id="email-input" class="form-input" placeholder="Enter your email" required>
+          <input type="email" id="email-input" class="form-input" placeholder="Enter your email" required autocapitalize="off" autocomplete="email" inputmode="email">
         </div>
         
         <div class="form-group">
           <label for="name-input" class="form-label">Name (optional):</label>
-          <input type="text" id="name-input" class="form-input" placeholder="Enter your name">
+          <input type="text" id="name-input" class="form-input" placeholder="Enter your name" autocapitalize="words" autocomplete="name">
         </div>
         
         <div id="form-status"></div>

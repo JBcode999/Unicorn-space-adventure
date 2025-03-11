@@ -16,6 +16,11 @@ let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.
 // Timing for special effects
 let nextShootingStarTime = 0;
 
+// Expose gameState to window for access from leaderboard.js
+Object.defineProperty(window, 'gameState', {
+  get: function() { return gameState; }
+});
+
 // NO SOUND FUNCTIONALITY
 
 function preload() {
@@ -726,7 +731,11 @@ function spawnAsteroid() {
 
 // Handle restart and sound toggle
 function keyPressed() {
-  if (key === 'r' && gameState === "gameover") {
+  // Don't process key events if an input field is focused
+  if (window.inputFocused) return;
+  
+  // Check for the 'R' key to reset the game
+  if (key === 'r' || key === 'R') {
     resetGame();
   }
 }
@@ -1039,7 +1048,12 @@ function windowResized() {
 
 // Function to handle touch controls
 function touchMoved() {
-  // Only prevent default if inside canvas
+  // Don't handle touch events when game is over or modals are active
+  if (gameState === "gameover") {
+    return true; // Allow default behavior when game is over
+  }
+  
+  // Only prevent default if inside canvas and game is active
   if (mouseX >= 0 && mouseX <= width && mouseY >= 0 && mouseY <= height) {
     // Update player position for touch movement
     if (gameState === "playing") {
@@ -1079,13 +1093,20 @@ function touchMoved() {
 
 // Function to handle touch on screen
 function touchStarted() {
+  // Don't handle touch events when modals are active
+  if (gameState === "gameover") {
+    // Check if touch is inside canvas
+    if (mouseX >= 0 && mouseX <= width && mouseY >= 0 && mouseY <= height) {
+      // Only restart game if touch is on canvas and not on modal elements
+      // This will be further managed by the pointerEvents handling in the HTML
+      resetGame();
+      return false;
+    }
+    return true; // Allow default behavior outside canvas
+  }
+  
   // Only prevent default if inside canvas
   if (mouseX >= 0 && mouseX <= width && mouseY >= 0 && mouseY <= height) {
-    // Restart game if game over and screen is tapped
-    if (gameState === "gameover") {
-      resetGame();
-    }
-    
     return false; // Prevent default action only for canvas area
   }
   // Return true to allow default behavior (like scrolling) outside the canvas
