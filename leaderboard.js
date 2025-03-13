@@ -228,8 +228,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // Set up event listeners
   setupEventListeners();
   
-  // Add clear data button
-  setTimeout(addClearDataButton, 500);
+  // We're removing the clear data button for a cleaner UI
+  // setTimeout(addClearDataButton, 500);
 });
 
 // Initialize Supabase client
@@ -312,35 +312,12 @@ function initializeDOMElements() {
     nameInput.addEventListener('blur', protectScoreDisplay);
     nameInput.addEventListener('animationstart', protectScoreDisplay);
     
-    // Add saved name helper if available
+    // Load saved name silently in the background (but don't show it)
     const savedName = localStorage.getItem('unicornGameName');
     if (savedName) {
-      addSavedNameHelper(savedName);
+      // We'll keep the saved name in localStorage but won't show the helper button
+      console.log('Saved name found but not displaying helper button');
     }
-  }
-}
-
-// Add helper for saved name
-function addSavedNameHelper(savedName) {
-  if (!nameInput || !savedName) return;
-  
-  const nameHelperLink = document.createElement('div');
-  nameHelperLink.innerHTML = `<button id="restore-name-btn" class="text-button">Use saved name</button>`;
-  nameHelperLink.style.fontSize = '12px';
-  nameHelperLink.style.marginTop = '4px';
-  nameHelperLink.style.textAlign = 'right';
-  
-  // Insert after name input
-  if (nameInput.parentNode) {
-    nameInput.parentNode.insertBefore(nameHelperLink, nameInput.nextSibling);
-    
-    // Add click event to restore name
-    document.getElementById('restore-name-btn').addEventListener('click', function(e) {
-      e.preventDefault();
-      nameInput.value = savedName;
-      window._userManuallyEnteredName = true;
-      nameHelperLink.style.display = 'none';
-    });
   }
 }
 
@@ -1914,89 +1891,6 @@ function restoreAllCanvases() {
     window._ALL_STORED_CANVASES = [];
   } catch (e) {
     console.error('Error restoring all canvases:', e);
-  }
-}
-
-// Add a new function to clear all saved data
-function addClearDataButton() {
-  // Create the clear data button container
-  const clearDataContainer = document.createElement('div');
-  clearDataContainer.className = 'clear-data-container';
-  clearDataContainer.style.marginTop = '20px';
-  clearDataContainer.style.textAlign = 'center';
-  clearDataContainer.style.fontSize = '12px';
-  clearDataContainer.style.opacity = '0.7';
-  
-  // Create the button
-  const clearDataButton = document.createElement('button');
-  clearDataButton.className = 'text-button';
-  clearDataButton.textContent = '🧹 Clear All Saved Game Data';
-  clearDataButton.style.fontSize = '12px';
-  clearDataButton.style.color = '#ffcccc';
-  
-  // Add click handler
-  clearDataButton.addEventListener('click', function(e) {
-    e.preventDefault();
-    
-    // Clear all localStorage related to the game
-    localStorage.removeItem('unicornGameEmail');
-    localStorage.removeItem('unicornGameName');
-    
-    // Clear any other potential game data
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && (key.includes('unicorn') || key.includes('game') || key.includes('score'))) {
-        localStorage.removeItem(key);
-      }
-    }
-    
-    // Clear session storage too
-    sessionStorage.clear();
-    
-    // Reset any name/email fields
-    if (nameInput) nameInput.value = '';
-    if (emailInput) emailInput.value = '';
-    
-    // Remove any helper elements
-    const helpers = document.querySelectorAll('.name-helper, .autofill-helper, .autofill-message');
-    helpers.forEach(el => el.parentNode.removeChild(el));
-    
-    // Show confirmation
-    const confirmMsg = document.createElement('div');
-    confirmMsg.textContent = '✅ All saved game data has been cleared!';
-    confirmMsg.style.color = '#90ff90';
-    confirmMsg.style.marginTop = '10px';
-    
-    clearDataContainer.innerHTML = '';
-    clearDataContainer.appendChild(confirmMsg);
-    
-    // Reset flag for manual name entry
-    window._userManuallyEnteredName = false;
-    
-    // Log the action
-    console.log('All saved game data has been cleared by user request');
-    
-    // Restore button after 3 seconds
-    setTimeout(() => {
-      clearDataContainer.innerHTML = '';
-      clearDataContainer.appendChild(clearDataButton);
-    }, 3000);
-  });
-  
-  // Add button to container
-  clearDataContainer.appendChild(clearDataButton);
-  
-  // Find a good place to insert it
-  const leaderboardForm = document.getElementById('leaderboard-form');
-  const submitButton = document.getElementById('submit-score');
-  
-  if (leaderboardForm && submitButton) {
-    const buttonContainer = submitButton.parentNode;
-    if (buttonContainer) {
-      buttonContainer.parentNode.insertBefore(clearDataContainer, buttonContainer.nextSibling);
-    } else {
-      leaderboardForm.appendChild(clearDataContainer);
-    }
   }
 }
 
