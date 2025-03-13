@@ -122,12 +122,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Show leaderboard form modal when game ends
 function showLeaderboardForm(finalScore) {
-  // Store the score globally to ensure it's available for submission
-  currentScore = finalScore;
+  // Convert score to number and ensure it's valid
+  const scoreValue = parseInt(finalScore, 10) || 0;
   
-  // Update the displayed score
+  // Store the score globally to ensure it's available for submission
+  currentScore = scoreValue;
+  
+  console.log('Game over - Final Score:', scoreValue);
+  
+  // Update the displayed score - set it immediately and again after a short delay
   if (finalScoreElement) {
-    finalScoreElement.textContent = finalScore;
+    // Set immediately
+    finalScoreElement.textContent = scoreValue;
+    
+    // Set again after a short delay to ensure it's not overwritten
+    setTimeout(() => {
+      finalScoreElement.textContent = scoreValue;
+    }, 100);
   }
   
   // Reset submission flag
@@ -305,8 +316,11 @@ async function handleScoreSubmit(event) {
 
 // Handle share to X button click
 function handleShareToX() {
-  const score = finalScoreElement.textContent;
+  // Use the stored currentScore value instead of reading from the element
+  const score = currentScore;
   const name = nameInput.value.trim() || 'Anonymous Unicorn';
+  
+  console.log('Sharing score:', score);
   
   // Create share text
   const text = `I just scored ${score} points as ${name} in Unicorn Space Adventure! Can you beat my magical score? 🦄✨`;
@@ -431,7 +445,12 @@ function renderLeaderboard(data) {
 
 // Share a specific leaderboard entry
 function shareLeaderboardEntry(entry) {
-  const text = `${entry.name || 'Anonymous Unicorn'} scored ${entry.score} points in Unicorn Space Adventure! Can you beat this magical score? 🦄✨`;
+  // Ensure score is a number
+  const scoreValue = parseInt(entry.score, 10) || 0;
+  
+  console.log('Sharing leaderboard entry with score:', scoreValue);
+  
+  const text = `${entry.name || 'Anonymous Unicorn'} scored ${scoreValue} points in Unicorn Space Adventure! Can you beat this magical score? 🦄✨`;
   const hashtags = 'UnicornGame,p5js,GameDev';
   const url = window.location.href;
   
@@ -648,3 +667,31 @@ function showSetupInstructions() {
     `;
   }
 }
+
+// Function to clear saved credentials from localStorage
+function clearSavedCredentials() {
+  // Clear the saved values from localStorage
+  localStorage.removeItem('unicornGameEmail');
+  localStorage.removeItem('unicornGameName');
+  
+  // Clear the input fields
+  if (emailInput) emailInput.value = '';
+  if (nameInput) nameInput.value = '';
+  
+  // Focus on the email input
+  if (emailInput) emailInput.focus();
+  
+  // Show a brief confirmation message
+  if (formStatusElement) {
+    formStatusElement.textContent = 'Saved information cleared!';
+    formStatusElement.style.color = '#90ff90';
+    
+    // Clear the message after 2 seconds
+    setTimeout(() => {
+      formStatusElement.textContent = '';
+    }, 2000);
+  }
+}
+
+// Expose the function globally
+window.clearSavedCredentials = clearSavedCredentials;

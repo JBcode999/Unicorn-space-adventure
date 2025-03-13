@@ -472,20 +472,17 @@
     }
     
     .modal-content {
-      background: linear-gradient(to bottom right, #4a148c, #7b1fa2);
-      color: white;
-      border-radius: 20px;
-      padding: 30px;
-      width: 90%;
       max-width: 500px;
-      box-shadow: 0 0 30px rgba(200, 100, 255, 0.5);
-      text-align: center;
+      width: 90%;
+      padding: 20px;
+      background-color: rgba(30, 30, 60, 0.95);
+      border-radius: 12px;
+      box-shadow: 0 0 20px rgba(120, 120, 255, 0.5), 0 0 40px rgba(80, 80, 255, 0.3);
       position: relative;
-      overflow-y: auto; /* Allow vertical scrolling within modal */
-      max-height: 80vh; /* Limit height to allow scrolling */
-      margin: 50px auto; /* Add margin to ensure visibility */
-      -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
-      z-index: 2100; /* Higher than modal background */
+      color: white;
+      text-align: center;
+      overflow: hidden;
+      z-index: 12;
     }
     
     .modal-content::before {
@@ -1018,6 +1015,59 @@
       /* Hide the side donation panel on mobile when game over is shown */
       body.gameover-shown #donation-panel {
         display: none !important;
+      }
+    }
+    
+    /* Styles for modal */
+    .modal-content {
+      max-width: 500px;
+      width: 90%;
+      padding: 20px;
+      background-color: rgba(30, 30, 60, 0.95);
+      border-radius: 12px;
+      box-shadow: 0 0 20px rgba(120, 120, 255, 0.5), 0 0 40px rgba(80, 80, 255, 0.3);
+      position: relative;
+      color: white;
+      text-align: center;
+      overflow: hidden;
+      z-index: 12;
+    }
+    
+    /* Form input with button container */
+    .input-with-button {
+      display: flex;
+      gap: 8px;
+      width: 100%;
+    }
+    
+    .input-with-button .form-input {
+      flex: 1;
+    }
+    
+    .clear-button {
+      background-color: #777;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      padding: 0 10px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+    
+    .clear-button:hover {
+      background-color: #999;
+    }
+    
+    @media (max-width: 768px) {
+      .input-with-button {
+        flex-direction: column;
+        gap: 4px;
+      }
+      
+      .clear-button {
+        align-self: flex-end;
+        padding: 4px 8px;
       }
     }
   </style>

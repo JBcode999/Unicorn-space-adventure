@@ -1,6 +1,7 @@
 let player;
 let gems = [];
 let asteroids = [];
+let powerUps = []; // New array to store power-ups
 let score = 0;
 let gameState = "playing";
 let starfield = [];
@@ -12,6 +13,11 @@ let messages = []; // Array for temporary on-screen messages
 let sparkles = []; // Array for sparkle effects
 let shootingStars = []; // Array for shooting stars
 let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+// Shield power-up variables
+let hasShield = false;
+let shieldTimer = 0;
+let shieldDuration = 400; // Duration in frames (about 6-7 seconds at 60fps)
 
 // Timing for special effects
 let nextShootingStarTime = 0;
@@ -72,6 +78,14 @@ function draw() {
   updateBackgroundEffects();
   
   if (gameState === "playing") {
+    // Update shield timer if active
+    if (hasShield) {
+      shieldTimer--;
+      if (shieldTimer <= 0) {
+        hasShield = false;
+      }
+    }
+    
     // Update and draw rainbow trail
     for (let i = rainbowTrail.length - 1; i >= 0; i--) {
       rainbowTrail[i].show();
@@ -84,6 +98,9 @@ function draw() {
     // More asteroids and fewer gems at higher levels
     if (frameCount % max(5, 60 - level/2) === 0 && random() > 0.3 - level/200) spawnGem();
     if (frameCount % max(3, 45 - level/2) === 0 && random() > 0.2 - level/200) spawnAsteroid();
+    
+    // Spawn power-ups very rarely (about once every 15-20 seconds)
+    if (frameCount % 900 === 0 && random() > 0.7) spawnPowerUp();
     
     // Update and display player
     player.update();
@@ -114,6 +131,32 @@ function draw() {
       }
     }
     
+    // Update and manage power-ups
+    for (let i = powerUps.length - 1; i >= 0; i--) {
+      powerUps[i].show();
+      let isOffScreen = powerUps[i].update();
+      
+      // Check for collision with player
+      if (player.hits(powerUps[i])) {
+        // Activate shield
+        hasShield = true;
+        shieldTimer = shieldDuration;
+        
+        // Create sparkle effect at power-up position
+        createSparkleEffect(powerUps[i].pos.x, powerUps[i].pos.y, color(100, 255, 255));
+        
+        // Add floating text
+        addFloatingText(powerUps[i].pos.x, powerUps[i].pos.y, "SHIELD!");
+        
+        // Remove the collected power-up
+        powerUps.splice(i, 1);
+      } 
+      // Remove if off screen
+      else if (isOffScreen) {
+        powerUps.splice(i, 1);
+      }
+    }
+    
     // Update and manage asteroids
     for (let i = asteroids.length - 1; i >= 0; i--) {
       asteroids[i].show();
@@ -121,6 +164,27 @@ function draw() {
       
       // Check for collision with player
       if (player.hits(asteroids[i])) {
+        // If player has shield, destroy asteroid instead of game over
+        if (hasShield) {
+          // Create explosion effect for asteroid
+          createExplosionEffect(asteroids[i].pos.x, asteroids[i].pos.y);
+          
+          // Add points for destroying asteroid with shield
+          score += 25;
+          
+          // Add floating score text
+          addFloatingScore(asteroids[i].pos.x, asteroids[i].pos.y, 25);
+          
+          // Remove the asteroid
+          asteroids.splice(i, 1);
+          
+          // Create a burst from the shield
+          createShieldBurst(player.pos.x, player.pos.y);
+          
+          continue; // Skip to next asteroid
+        }
+        
+        // Normal game over if no shield
         gameState = "gameover";
         // Create explosion effect when player hits asteroid
         createExplosionEffect(player.pos.x, player.pos.y);
@@ -407,6 +471,30 @@ class Player {
   show() {
     push();
     translate(this.pos.x, this.pos.y);
+    
+    // Draw shield if active
+    if (hasShield) {
+      // Shield pulse effect based on remaining time
+      let pulseAmount = map(sin(frameCount * 0.2), -1, 1, 0.8, 1.2);
+      let opacity = map(shieldTimer, 0, shieldDuration, 50, 180);
+      if (shieldTimer < 100) {
+        // Make shield flash when about to expire
+        opacity = map(sin(frameCount * 0.5), -1, 1, 40, 180);
+      }
+      
+      // Draw rainbow shield aura
+      noFill();
+      for (let i = 0; i < 7; i++) {
+        let shieldSize = this.size * 2.2 * pulseAmount;
+        let hue = (frameCount * 2 + i * 30) % 360;
+        
+        colorMode(HSB, 360, 100, 100, 255);
+        stroke(hue, 90, 100, opacity);
+        strokeWeight(3);
+        ellipse(0, 0, shieldSize, shieldSize);
+        colorMode(RGB, 255, 255, 255, 255);
+      }
+    }
     
     // Body color - light pink
     let bodyColor = color(255, 230, 250);
@@ -765,6 +853,7 @@ function resetGame() {
   player = new Player();
   gems = [];
   asteroids = [];
+  powerUps = []; // Clear power-ups
   score = 0;
   distanceTraveled = 0;
   level = 1;
@@ -773,6 +862,10 @@ function resetGame() {
   rainbowTrail = [];
   sparkles = [];
   messages = [];
+  
+  // Reset shield state
+  hasShield = false;
+  shieldTimer = 0;
 }
 
 function updateGameDifficulty() {
@@ -1163,6 +1256,193 @@ function createRainbowBurst(x, y) {
         y,
         true // Mark as burst particle for stronger velocity
       )
+    );
+  }
+}
+
+// PowerUp class for shield power-up
+class PowerUp {
+  constructor() {
+    this.size = 30;
+    this.pos = this.randomPosition();
+    this.direction = this.determineDirection();
+    this.angle = 0;
+    this.rotationSpeed = 0.04;
+    this.glowAmount = 0;
+    this.glowSpeed = 0.1;
+  }
+  
+  randomPosition() {
+    // Randomly spawn from one of the four sides, similar to gems
+    let spawnSide = floor(random(4)); // 0 = top, 1 = right, 2 = bottom, 3 = left
+    
+    switch(spawnSide) {
+      case 0: // Top
+        return createVector(
+          random(0, width),
+          -this.size
+        );
+      case 1: // Right
+        return createVector(
+          width + this.size,
+          random(0, height)
+        );
+      case 2: // Bottom
+        return createVector(
+          random(0, width),
+          height + this.size
+        );
+      case 3: // Left
+        return createVector(
+          -this.size,
+          random(0, height)
+        );
+    }
+  }
+  
+  determineDirection() {
+    // Calculate direction vector toward center with some randomness
+    let targetX = width/2 + random(-width/6, width/6);
+    let targetY = height/2 + random(-height/6, height/6);
+    let target = createVector(targetX, targetY);
+    
+    let dir = p5.Vector.sub(target, this.pos);
+    dir.normalize();
+    dir.mult(random(0.8, 1.5)); // Slower than gems for better visibility
+    return dir;
+  }
+  
+  update() {
+    // Only move if game is playing
+    if (gameState === "playing") {
+      // Move in the determined direction
+      this.pos.add(this.direction);
+      
+      // Rotate the power-up
+      this.angle += this.rotationSpeed;
+      
+      // Update glow pulse
+      this.glowAmount = sin(frameCount * this.glowSpeed) * 0.5;
+    }
+    
+    // Check if power-up is off-screen
+    return (this.pos.y > height + this.size || 
+            this.pos.x < -this.size || 
+            this.pos.x > width + this.size);
+  }
+  
+  show() {
+    push();
+    translate(this.pos.x, this.pos.y);
+    rotate(this.angle);
+    
+    // Draw glow effect
+    for (let i = 3; i > 0; i--) {
+      let glowSize = this.size * (1 + this.glowAmount) + i * 5;
+      let alpha = map(i, 3, 1, 50, 150);
+      
+      // Rainbow color based on frame
+      colorMode(HSB, 360, 100, 100, 255);
+      let hue = (frameCount * 2) % 360;
+      fill(hue, 90, 100, alpha);
+      noStroke();
+      ellipse(0, 0, glowSize, glowSize);
+      colorMode(RGB, 255, 255, 255, 255);
+    }
+    
+    // Draw main shield icon
+    fill(220, 220, 255);
+    stroke(100, 200, 255);
+    strokeWeight(2);
+    ellipse(0, 0, this.size, this.size);
+    
+    // Draw shield symbol inside
+    noFill();
+    stroke(50, 100, 255);
+    strokeWeight(3);
+    arc(0, 0, this.size * 0.6, this.size * 0.6, PI * 0.25, PI * 0.75);
+    line(-this.size * 0.2, this.size * 0.1, 0, -this.size * 0.2);
+    line(this.size * 0.2, this.size * 0.1, 0, -this.size * 0.2);
+    
+    pop();
+  }
+}
+
+// Function to spawn a shield power-up
+function spawnPowerUp() {
+  powerUps.push(new PowerUp());
+}
+
+// Function to add floating text (general version of addFloatingScore)
+function addFloatingText(x, y, message) {
+  let floatingText = {
+    x: x,
+    y: y,
+    message: message,
+    alpha: 255,
+    ySpeed: -2,
+    display: function() {
+      textAlign(CENTER);
+      textSize(20);
+      fill(100, 200, 255, this.alpha);
+      // Add glow
+      for (let i = 3; i > 0; i--) {
+        fill(100, 200, 255, this.alpha * 0.3);
+        text(this.message, this.x, this.y + i);
+      }
+      fill(200, 230, 255, this.alpha);
+      text(this.message, this.x, this.y);
+      this.y += this.ySpeed;
+      this.alpha -= 5; // Fade out
+    }
+  };
+  messages.push(floatingText);
+}
+
+// Function to create shield burst effect when an asteroid hits the shield
+function createShieldBurst(x, y) {
+  // Create a burst of 20-30 particles
+  let burstCount = floor(random(20, 30));
+  
+  for (let i = 0; i < burstCount; i++) {
+    let angle = random(TWO_PI);
+    let distance = random(30, 60);
+    let speed = random(3, 8);
+    
+    sparkles.push({
+      x: x,
+      y: y,
+      size: random(3, 8),
+      xSpeed: cos(angle) * speed,
+      ySpeed: sin(angle) * speed,
+      alpha: 255,
+      color: color(
+        random(100, 200), 
+        random(200, 255), 
+        random(200, 255)
+      ),
+      display: function() {
+        noStroke();
+        fill(red(this.color), green(this.color), blue(this.color), this.alpha);
+        circle(this.x, this.y, this.size);
+        
+        // Update position
+        this.x += this.xSpeed;
+        this.xSpeed *= 0.95; // Slow down
+        this.y += this.ySpeed;
+        this.ySpeed *= 0.95; // Slow down
+        
+        // Fade out
+        this.alpha -= 8;
+      }
+    });
+  }
+  
+  // Create rainbow burst effect
+  for (let i = 0; i < 10; i++) {
+    createRainbowBurst(
+      x + random(-20, 20),
+      y + random(-20, 20)
     );
   }
 }
