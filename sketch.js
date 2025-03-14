@@ -56,6 +56,10 @@ let backgroundMusic = {
   timer: null
 };
 
+// Audio initialization flag
+let audioInitialized = false;
+let showAudioPrompt = false;
+
 // NO SOUND FUNCTIONALITY
 
 function preload() {
@@ -75,10 +79,19 @@ function setup() {
   try {
     audioContext = new (window.AudioContext || window.webkitAudioContext)();
     
-    // Start background music after a short delay to ensure audio context is ready
-    setTimeout(() => {
-      startBackgroundMusic();
-    }, 1000);
+    // Check if we're on mobile
+    if (isMobile) {
+      // On mobile, show a prompt to tap for audio
+      showAudioPrompt = true;
+      
+      // Add touch listener to the whole document for first interaction
+      document.addEventListener('touchstart', initAudioOnFirstTouch, { once: true });
+    } else {
+      // On desktop, try to start audio after a short delay
+      setTimeout(() => {
+        initAudio();
+      }, 1000);
+    }
   } catch(e) {
     console.warn('Web Audio API not supported in this browser');
     audioContext = null;
@@ -120,6 +133,11 @@ function draw() {
   updateBackgroundEffects();
   
   if (gameState === "playing") {
+    // Show audio prompt for mobile if needed
+    if (showAudioPrompt) {
+      drawAudioPrompt();
+    }
+    
     // Update shield timer if active
     if (hasShield) {
       shieldTimer--;
@@ -1307,6 +1325,11 @@ function touchStarted() {
     return true; // Allow default behavior outside canvas
   }
   
+  // If audio hasn't been initialized yet, do it now
+  if (!audioInitialized && audioContext) {
+    initAudio();
+  }
+  
   // Only prevent default if inside canvas
   if (mouseX >= 0 && mouseX <= width && mouseY >= 0 && mouseY <= height) {
     return false; // Prevent default action only for canvas area
@@ -1768,4 +1791,55 @@ function noteToFrequency(note) {
   // A4 is 440Hz
   const semitoneFromA4 = (octave - 4) * 12 + notes[noteName] - notes['A'];
   return 440 * Math.pow(2, semitoneFromA4 / 12);
+}
+
+// Function to draw a prompt for mobile users to tap for audio
+function drawAudioPrompt() {
+  // Semi-transparent overlay
+  fill(0, 0, 0, 150);
+  rect(0, 0, width, height);
+  
+  // White text
+  fill(255);
+  textAlign(CENTER, CENTER);
+  textSize(24);
+  text("TAP ANYWHERE TO START AUDIO", width/2, height/2);
+  
+  // Pulsing border
+  noFill();
+  stroke(255, 255, 255, 128 + 127 * sin(frameCount * 0.05));
+  strokeWeight(4);
+  rect(width/2 - 180, height/2 - 30, 360, 60, 10);
+  noStroke();
+}
+
+// Function to initialize audio on first touch (for mobile)
+function initAudioOnFirstTouch() {
+  // Hide the prompt
+  showAudioPrompt = false;
+  
+  // Initialize audio
+  initAudio();
+  
+  // Remove the event listener since we only need it once
+  document.removeEventListener('touchstart', initAudioOnFirstTouch);
+}
+
+// Function to initialize audio
+function initAudio() {
+  if (audioInitialized || !audioContext) return;
+  
+  // Resume audio context if it was suspended
+  if (audioContext.state === 'suspended') {
+    audioContext.resume().then(() => {
+      console.log('AudioContext resumed successfully');
+      startBackgroundMusic();
+    }).catch(error => {
+      console.error('Failed to resume AudioContext:', error);
+    });
+  } else {
+    startBackgroundMusic();
+  }
+  
+  audioInitialized = true;
 }
