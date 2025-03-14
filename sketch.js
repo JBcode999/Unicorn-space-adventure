@@ -22,6 +22,43 @@ let shieldDuration = 400; // Duration in frames (about 6-7 seconds at 60fps)
 // Timing for special effects
 let nextShootingStarTime = 0;
 
+// Viral game features
+// 1. Daily Challenges
+let dailyChallenges = [
+  { description: "Collect 30 gems", type: "gems", target: 30, reward: "Rainbow Trail" },
+  { description: "Destroy 5 asteroids with shield", type: "asteroidDestroy", target: 5, reward: "Star Burst" },
+  { description: "Travel 1000 distance", type: "distance", target: 1000, reward: "Golden Horn" }
+];
+let currentChallenge = null;
+let challengeProgress = 0;
+let challengeCompleted = false;
+let gemsCollected = 0;
+let asteroidsDestroyed = 0;
+
+// 2. Unlockable Unicorn Skins
+let unicornSkins = [
+  { name: "Classic", cost: 0, unlocked: true, bodyColor: [255, 230, 250] },
+  { name: "Galaxy", cost: 500, unlocked: false, bodyColor: [80, 50, 120] },
+  { name: "Rainbow", cost: 1000, unlocked: false, bodyColor: [255, 150, 200] },
+  { name: "Robot", cost: 2000, unlocked: false, bodyColor: [180, 180, 200] }
+];
+let currentSkinIndex = 0;
+let totalCoins = 0;
+
+// 3. Combo System
+let comboCounter = 0;
+let comboTimer = 0;
+let comboMultiplier = 1;
+const comboTimeout = 60; // frames (1 second at 60fps)
+
+// 5. Weekly Special Events
+let isSpecialEvent = false;
+let specialEventMultiplier = 1;
+let specialEventType = "none";
+
+// 6. Secret Rare Collectibles
+let specialGemChance = 0.01; // 1% chance
+
 // Expose gameState to window for access from leaderboard.js
 Object.defineProperty(window, 'gameState', {
   get: function() { return gameState; }
@@ -105,13 +142,22 @@ function setup() {
     starfield.push({
       x: random(0, width),
       y: random(-height, height * 2),
-      size: random(1, 3),
-      speed: random(0.5, 2) // Different stars move at different speeds
+      size: random(1, 3), // Different stars move at different speeds
+      speed: random(0.5, 2)
     });
   }
   
   // Set up initial timing for effects
   nextShootingStarTime = random(60, 180); // First shooting star in 1-3 seconds
+  
+  // Load saved game data
+  loadGameData();
+  
+  // Set up daily challenge
+  setupDailyChallenge();
+  
+  // Check for special events
+  checkForSpecialEvent();
 }
 
 function draw() {
@@ -132,6 +178,12 @@ function draw() {
   // Update and draw background effects
   updateBackgroundEffects();
   
+  // Handle skin menu state
+  if (gameState === "skinMenu") {
+    showSkinMenu();
+    return; // Don't process the rest of the game loop
+  }
+  
   if (gameState === "playing") {
     // Show audio prompt for mobile if needed
     if (showAudioPrompt) {
@@ -143,6 +195,15 @@ function draw() {
       shieldTimer--;
       if (shieldTimer <= 0) {
         hasShield = false;
+      }
+    }
+    
+    // Update combo timer
+    if (comboTimer > 0) {
+      comboTimer--;
+      if (comboTimer === 0) {
+        comboCounter = 0;
+        comboMultiplier = 1;
       }
     }
     
@@ -160,7 +221,12 @@ function draw() {
     if (frameCount % max(3, 45 - level/2) === 0 && random() > 0.2 - level/200) spawnAsteroid();
     
     // Spawn power-ups very rarely (about once every 15-20 seconds)
-    if (frameCount % 900 === 0 && random() > 0.7) spawnPowerUp();
+    // Increase spawn rate during special events
+    let powerUpChance = 0.7;
+    if (isSpecialEvent && specialEventType === 'moreShields') {
+      powerUpChance = 0.3; // Much higher chance during shield event
+    }
+    if (frameCount % 900 === 0 && random() > powerUpChance) spawnPowerUp();
     
     // Update and display player
     player.update();
@@ -173,8 +239,32 @@ function draw() {
       
       // Check for collision with player
       if (player.hits(gems[i])) {
-        // Add to score
-        score += gems[i].value;
+        // Add to score with combo multiplier
+        let baseValue = gems[i].value;
+        let finalValue = baseValue * comboMultiplier;
+        
+        // Apply special event multiplier for double gems
+        if (isSpecialEvent && specialEventType === 'doubleGems') {
+          finalValue *= specialEventMultiplier;
+        }
+        
+        score += finalValue;
+        
+        // Add coins (1 per gem, more for special gems)
+        let coinValue = gems[i].isSpecial ? 5 : 1;
+        totalCoins += coinValue;
+        
+        // Update combo
+        comboCounter++;
+        comboTimer = comboTimeout;
+        
+        // Calculate combo multiplier (max 5x)
+        // Apply special event multiplier for double combos
+        let maxCombo = 5;
+        if (isSpecialEvent && specialEventType === 'doubleCombos') {
+          maxCombo = 10; // Higher max combo during combo event
+        }
+        comboMultiplier = Math.min(maxCombo, 1 + Math.floor(comboCounter/3));
         
         // Play collect sound
         playCollectSound();
@@ -183,7 +273,10 @@ function draw() {
         createSparkleEffect(gems[i].pos.x, gems[i].pos.y, gems[i].color);
         
         // Add floating score text
-        addFloatingScore(gems[i].pos.x, gems[i].pos.y, gems[i].value);
+        addFloatingScore(gems[i].pos.x, gems[i].pos.y, finalValue);
+        
+        // Update challenge progress
+        updateChallengeProgress('gems');
         
         // Remove the collected gem
         gems.splice(i, 1);
@@ -241,8 +334,14 @@ function draw() {
           // Add points for destroying asteroid with shield
           score += 25;
           
+          // Add coins for destroying asteroid
+          totalCoins += 3;
+          
           // Add floating score text
           addFloatingScore(asteroids[i].pos.x, asteroids[i].pos.y, 25);
+          
+          // Update challenge progress
+          updateChallengeProgress('asteroidDestroy');
           
           // Remove the asteroid
           asteroids.splice(i, 1);
@@ -259,6 +358,9 @@ function draw() {
         playGameOverSound();
         // Create explosion effect when player hits asteroid
         createExplosionEffect(player.pos.x, player.pos.y);
+        
+        // Save game data
+        saveGameData();
         
         // Cache the final score to ensure it doesn't change
         const finalScore = score;
@@ -277,6 +379,16 @@ function draw() {
         asteroids.splice(i, 1);
       }
     }
+    
+    // Display challenge and coins
+    displayChallenge();
+    
+    // Display combo counter
+    displayCombo();
+    
+    // Display skin menu hint
+    displaySkinMenuHint();
+    
   } else if (gameState === "gameover") {
     // Still display player, gems and asteroids
     player.show();
@@ -301,6 +413,11 @@ function draw() {
       textSize(38 + i * 1.5);
       text(`SCORE: ${score}`, width / 2, height / 2 + 10);
     }
+    
+    // Show coins earned this run
+    textSize(24);
+    fill(255, 215, 0); // Gold color
+    text(`Coins: ${totalCoins}`, width / 2, height / 2 + 50);
     
     // Just show restart instruction
     textSize(20);
@@ -567,8 +684,12 @@ class Player {
       }
     }
     
-    // Body color - light pink
-    let bodyColor = color(255, 230, 250);
+    // Get the current skin color
+    let bodyColor = color(
+      unicornSkins[currentSkinIndex].bodyColor[0],
+      unicornSkins[currentSkinIndex].bodyColor[1],
+      unicornSkins[currentSkinIndex].bodyColor[2]
+    );
     
     // Draw legs (same color as body)
     stroke(bodyColor);
@@ -902,7 +1023,35 @@ class Asteroid {
 
 // Spawn functions
 function spawnGem() {
-  gems.push(new Gem());
+  // Check for special gem (1% chance)
+  if (random() < specialGemChance) {
+    let specialGem = new Gem();
+    specialGem.isSpecial = true;
+    specialGem.value = 50; // 5-10x normal value
+    specialGem.size *= 1.5; // Bigger
+    
+    // Special rainbow color
+    colorMode(HSB, 360, 100, 100, 255);
+    specialGem.color = color(
+      (frameCount * 2) % 360, // Rainbow hue that changes over time
+      100, 
+      100
+    );
+    specialGem.glowColor = color(
+      ((frameCount * 2) + 180) % 360, // Complementary color
+      100, 
+      100
+    );
+    colorMode(RGB, 255, 255, 255, 255);
+    
+    gems.push(specialGem);
+    
+    // Add notification for special gem
+    addFloatingText(width/2, height/2 - 100, "SPECIAL GEM APPEARED!");
+  } else {
+    // Normal gem
+    gems.push(new Gem());
+  }
 }
 
 function spawnAsteroid() {
@@ -927,6 +1076,20 @@ function keyPressed() {
       startBackgroundMusic();
     }
   }
+  
+  // Check for the 'S' key to open skin menu
+  if (key === 's' || key === 'S') {
+    if (gameState === "playing") {
+      gameState = "skinMenu";
+    } else if (gameState === "skinMenu") {
+      gameState = "playing";
+    }
+  }
+  
+  // Check for ESC key to exit skin menu
+  if (keyCode === ESCAPE && gameState === "skinMenu") {
+    gameState = "playing";
+  }
 }
 
 function resetGame() {
@@ -946,6 +1109,14 @@ function resetGame() {
   // Reset shield state
   hasShield = false;
   shieldTimer = 0;
+  
+  // Reset combo
+  comboCounter = 0;
+  comboTimer = 0;
+  comboMultiplier = 1;
+  
+  // Save game data
+  saveGameData();
   
   // Restart background music if it was stopped
   if (!backgroundMusic.isPlaying && audioContext) {
@@ -1323,6 +1494,19 @@ function touchStarted() {
       return false;
     }
     return true; // Allow default behavior outside canvas
+  }
+  
+  // Check if the skin hint was tapped (for mobile users)
+  if (gameState === "playing" && window.skinHintArea) {
+    const hint = window.skinHintArea;
+    if (mouseX >= hint.x && mouseX <= hint.x + hint.width &&
+        mouseY >= hint.y && mouseY <= hint.y + hint.height) {
+      // Open skin menu
+      gameState = "skinMenu";
+      // Play a sound for feedback
+      playCollectSound();
+      return false; // Prevent default
+    }
   }
   
   // If audio hasn't been initialized yet, do it now
@@ -1842,4 +2026,493 @@ function initAudio() {
   }
   
   audioInitialized = true;
+}
+
+// VIRAL GAME FEATURES
+
+// Function to load saved game data from localStorage
+function loadGameData() {
+  try {
+    // Load total coins
+    const savedCoins = localStorage.getItem('unicornGame_totalCoins');
+    if (savedCoins !== null) {
+      totalCoins = parseInt(savedCoins);
+    }
+    
+    // Load unlocked skins
+    const savedSkins = localStorage.getItem('unicornGame_skins');
+    if (savedSkins !== null) {
+      const unlockedSkins = JSON.parse(savedSkins);
+      for (let i = 0; i < unicornSkins.length; i++) {
+        if (unlockedSkins[i]) {
+          unicornSkins[i].unlocked = true;
+        }
+      }
+    }
+    
+    // Load current skin
+    const savedSkinIndex = localStorage.getItem('unicornGame_currentSkin');
+    if (savedSkinIndex !== null) {
+      currentSkinIndex = parseInt(savedSkinIndex);
+    }
+    
+    // Load challenge progress
+    const savedChallengeProgress = localStorage.getItem('unicornGame_challengeProgress');
+    if (savedChallengeProgress !== null) {
+      const challengeData = JSON.parse(savedChallengeProgress);
+      
+      // Only use saved challenge if it's from today
+      const today = new Date().toDateString();
+      if (challengeData.date === today) {
+        challengeProgress = challengeData.progress;
+        challengeCompleted = challengeData.completed;
+        gemsCollected = challengeData.gemsCollected || 0;
+        asteroidsDestroyed = challengeData.asteroidsDestroyed || 0;
+      }
+    }
+    
+    console.log('Game data loaded successfully');
+  } catch (e) {
+    console.warn('Error loading game data:', e);
+  }
+}
+
+// Function to save game data to localStorage
+function saveGameData() {
+  try {
+    // Save total coins
+    localStorage.setItem('unicornGame_totalCoins', totalCoins);
+    
+    // Save unlocked skins
+    const unlockedSkins = unicornSkins.map(skin => skin.unlocked);
+    localStorage.setItem('unicornGame_skins', JSON.stringify(unlockedSkins));
+    
+    // Save current skin
+    localStorage.setItem('unicornGame_currentSkin', currentSkinIndex);
+    
+    // Save challenge progress
+    const challengeData = {
+      date: new Date().toDateString(),
+      progress: challengeProgress,
+      completed: challengeCompleted,
+      gemsCollected: gemsCollected,
+      asteroidsDestroyed: asteroidsDestroyed
+    };
+    localStorage.setItem('unicornGame_challengeProgress', JSON.stringify(challengeData));
+    
+    console.log('Game data saved successfully');
+  } catch (e) {
+    console.warn('Error saving game data:', e);
+  }
+}
+
+// Function to set up the daily challenge
+function setupDailyChallenge() {
+  // Get today's date
+  const today = new Date();
+  const dayOfYear = Math.floor((today - new Date(today.getFullYear(), 0, 0)) / 86400000);
+  
+  // Select challenge based on day of year
+  currentChallenge = dailyChallenges[dayOfYear % dailyChallenges.length];
+  
+  // Reset progress if we don't have saved progress for today
+  const savedChallengeProgress = localStorage.getItem('unicornGame_challengeProgress');
+  if (savedChallengeProgress === null) {
+    challengeProgress = 0;
+    challengeCompleted = false;
+    gemsCollected = 0;
+    asteroidsDestroyed = 0;
+  } else {
+    const challengeData = JSON.parse(savedChallengeProgress);
+    if (challengeData.date !== today.toDateString()) {
+      challengeProgress = 0;
+      challengeCompleted = false;
+      gemsCollected = 0;
+      asteroidsDestroyed = 0;
+    }
+  }
+  
+  console.log('Daily challenge set up:', currentChallenge.description);
+}
+
+// Function to update challenge progress
+function updateChallengeProgress(type, amount = 1) {
+  if (challengeCompleted || !currentChallenge) return;
+  
+  if (currentChallenge.type === type) {
+    challengeProgress += amount;
+    
+    // Check if challenge is completed
+    if (challengeProgress >= currentChallenge.target && !challengeCompleted) {
+      challengeCompleted = true;
+      
+      // Add reward notification
+      addFloatingText(width/2, height/2 - 100, "CHALLENGE COMPLETE!");
+      addFloatingText(width/2, height/2 - 70, `Reward: ${currentChallenge.reward}`);
+      
+      // Save progress
+      saveGameData();
+    }
+  }
+  
+  // Update specific counters
+  if (type === 'gems') {
+    gemsCollected += amount;
+  } else if (type === 'asteroidDestroy') {
+    asteroidsDestroyed += amount;
+  }
+}
+
+// Function to check for special events
+function checkForSpecialEvent() {
+  const date = new Date();
+  const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+  
+  if (isWeekend) {
+    isSpecialEvent = true;
+    
+    // Randomly choose a special event type for the weekend
+    const eventTypes = ['doubleGems', 'doubleCombos', 'moreShields'];
+    specialEventType = eventTypes[Math.floor(Math.random() * eventTypes.length)];
+    
+    switch (specialEventType) {
+      case 'doubleGems':
+        specialEventMultiplier = 2;
+        console.log('Special weekend event: Double Gems!');
+        break;
+      case 'doubleCombos':
+        specialEventMultiplier = 2;
+        console.log('Special weekend event: Double Combos!');
+        break;
+      case 'moreShields':
+        specialEventMultiplier = 3;
+        console.log('Special weekend event: More Shields!');
+        break;
+    }
+  } else {
+    isSpecialEvent = false;
+    specialEventMultiplier = 1;
+    specialEventType = 'none';
+  }
+}
+
+// Function to display the current challenge
+function displayChallenge() {
+  if (!currentChallenge) return;
+  
+  // Display challenge in top right corner
+  fill(255);
+  textAlign(RIGHT);
+  textSize(14);
+  text("DAILY CHALLENGE:", width - 20, 30);
+  
+  // Show challenge description and progress
+  let progressText = `${challengeProgress}/${currentChallenge.target}`;
+  
+  if (challengeCompleted) {
+    fill(100, 255, 100); // Green for completed
+    text(`${currentChallenge.description} - COMPLETE!`, width - 20, 50);
+  } else {
+    fill(255, 255, 100); // Yellow for in progress
+    text(`${currentChallenge.description} - ${progressText}`, width - 20, 50);
+  }
+  
+  // Display coins
+  fill(255, 215, 0); // Gold color
+  textAlign(RIGHT);
+  text(`Coins: ${totalCoins}`, width - 20, 70);
+  
+  // Display special event if active
+  if (isSpecialEvent) {
+    fill(255, 100, 255); // Pink for special events
+    let eventText = '';
+    switch (specialEventType) {
+      case 'doubleGems':
+        eventText = 'WEEKEND EVENT: DOUBLE GEMS!';
+        break;
+      case 'doubleCombos':
+        eventText = 'WEEKEND EVENT: DOUBLE COMBOS!';
+        break;
+      case 'moreShields':
+        eventText = 'WEEKEND EVENT: MORE SHIELDS!';
+        break;
+    }
+    text(eventText, width - 20, 90);
+  }
+}
+
+// Function to display combo counter
+function displayCombo() {
+  if (comboCounter > 1) {
+    // Calculate position - centered at bottom of screen
+    let x = width / 2;
+    let y = height - 50;
+    
+    // Calculate size based on combo (bigger for higher combos)
+    let size = 16 + min(comboCounter, 10);
+    
+    // Calculate opacity based on combo timer
+    let opacity = map(comboTimer, 0, comboTimeout, 100, 255);
+    
+    // Display combo text with glow effect
+    textAlign(CENTER);
+    textSize(size);
+    
+    // Glow effect
+    for (let i = 3; i > 0; i--) {
+      fill(255, 255, 0, opacity * 0.3);
+      text(`COMBO x${comboMultiplier}`, x, y + i);
+    }
+    
+    // Main text
+    fill(255, 255, 0, opacity);
+    text(`COMBO x${comboMultiplier}`, x, y);
+  }
+}
+
+// Function to display skin menu hint
+function displaySkinMenuHint() {
+  // Only show in playing state
+  if (gameState !== "playing") return;
+  
+  // Position in bottom left
+  let x = 120;
+  let y = height - 20;
+  
+  // Store the hint area for click detection
+  window.skinHintArea = {
+    x: x - 10,
+    y: y - 15,
+    width: 16 * 8 + 20, // Approximate width of text plus padding
+    height: 20
+  };
+  
+  // Rainbow text effect
+  textAlign(LEFT);
+  textSize(14);
+  
+  // Switch to HSB color mode for rainbow effect
+  colorMode(HSB, 360, 100, 100, 255);
+  
+  // Draw the text with rainbow colors
+  let message = isMobile ? "Tap for Skins" : "Press 'S' for Skins";
+  for (let i = 0; i < message.length; i++) {
+    // Calculate hue based on character position and time
+    let hue = (frameCount * 2 + i * 15) % 360;
+    fill(hue, 90, 100);
+    text(message.charAt(i), x + i * 8, y);
+  }
+  
+  // Add subtle pulsing glow behind text
+  let pulseAmount = sin(frameCount * 0.05) * 0.5 + 0.5; // Value between 0 and 1
+  noStroke();
+  fill(0, 0, 100, 20 * pulseAmount);
+  rect(x - 10, y - 15, message.length * 8 + 20, 20, 5);
+  
+  // For mobile, add a small finger tap icon
+  if (isMobile) {
+    // Draw a simple finger tap icon
+    push();
+    translate(x - 20, y - 5);
+    
+    // Finger
+    fill(255);
+    noStroke();
+    ellipse(0, 0, 8, 8); // Fingertip
+    rect(-1, 0, 2, 6);   // Finger
+    
+    // Tap animation
+    let tapPulse = sin(frameCount * 0.2) * 0.5 + 0.5;
+    noFill();
+    stroke(255, 150 * tapPulse);
+    strokeWeight(1);
+    ellipse(0, 0, 12 + tapPulse * 4, 12 + tapPulse * 4);
+    
+    pop();
+  }
+  
+  // Switch back to RGB color mode
+  colorMode(RGB, 255, 255, 255, 255);
+}
+
+// Function to unlock a skin
+function unlockSkin(index) {
+  if (index < 0 || index >= unicornSkins.length) return false;
+  if (unicornSkins[index].unlocked) return true; // Already unlocked
+  
+  const cost = unicornSkins[index].cost;
+  if (totalCoins >= cost) {
+    totalCoins -= cost;
+    unicornSkins[index].unlocked = true;
+    saveGameData();
+    return true;
+  }
+  
+  return false; // Not enough coins
+}
+
+// Function to select a skin
+function selectSkin(index) {
+  if (index < 0 || index >= unicornSkins.length) return false;
+  if (!unicornSkins[index].unlocked) return false;
+  
+  currentSkinIndex = index;
+  saveGameData();
+  return true;
+}
+
+// Function to show the skin selection menu
+function showSkinMenu() {
+  // Semi-transparent overlay
+  fill(0, 0, 0, 200);
+  rect(0, 0, width, height);
+  
+  // Title
+  fill(255);
+  textAlign(CENTER);
+  textSize(30);
+  text("UNICORN SKINS", width/2, 80);
+  
+  // Display coins
+  fill(255, 215, 0); // Gold color
+  textSize(20);
+  text(`Coins: ${totalCoins}`, width/2, 120);
+  
+  // Display skins
+  const skinWidth = 120;
+  const skinHeight = 150;
+  const padding = 20;
+  const startX = width/2 - ((skinWidth + padding) * unicornSkins.length) / 2 + skinWidth/2;
+  
+  for (let i = 0; i < unicornSkins.length; i++) {
+    const skin = unicornSkins[i];
+    const x = startX + i * (skinWidth + padding);
+    const y = height/2;
+    
+    // Draw skin box
+    if (currentSkinIndex === i) {
+      // Highlight selected skin
+      stroke(255, 215, 0); // Gold
+      strokeWeight(4);
+    } else if (skin.unlocked) {
+      stroke(255);
+      strokeWeight(2);
+    } else {
+      stroke(150);
+      strokeWeight(1);
+    }
+    
+    // Box background
+    if (skin.unlocked) {
+      fill(50, 50, 70);
+    } else {
+      fill(30, 30, 40);
+    }
+    rect(x - skinWidth/2, y - skinHeight/2, skinWidth, skinHeight, 10);
+    
+    // Draw unicorn preview (simplified)
+    if (skin.unlocked) {
+      noStroke();
+      fill(skin.bodyColor[0], skin.bodyColor[1], skin.bodyColor[2]);
+      ellipse(x, y - 20, 50, 60); // Body
+      ellipse(x, y - 50, 30, 30); // Head
+    } else {
+      // Locked icon
+      noStroke();
+      fill(150);
+      ellipse(x, y - 20, 50, 60); // Body (grayed out)
+      ellipse(x, y - 50, 30, 30); // Head (grayed out)
+      
+      // Lock icon
+      fill(200);
+      rect(x - 10, y - 30, 20, 25, 5);
+      ellipse(x, y - 35, 20, 20);
+    }
+    
+    // Skin name
+    noStroke();
+    fill(255);
+    textSize(16);
+    text(skin.name, x, y + 40);
+    
+    // Price or status
+    textSize(14);
+    if (skin.unlocked) {
+      fill(100, 255, 100);
+      text("Unlocked", x, y + 60);
+    } else {
+      fill(255, 215, 0);
+      text(`${skin.cost} coins`, x, y + 60);
+    }
+  }
+  
+  // Instructions
+  fill(255);
+  textSize(16);
+  text("Click on a skin to select or unlock it", width/2, height - 80);
+  text("Press ESC to return to the game", width/2, height - 50);
+}
+
+// Function to handle skin menu clicks
+function handleSkinMenuClick() {
+  if (gameState !== "skinMenu") return;
+  
+  const skinWidth = 120;
+  const skinHeight = 150;
+  const padding = 20;
+  const startX = width/2 - ((skinWidth + padding) * unicornSkins.length) / 2 + skinWidth/2;
+  
+  for (let i = 0; i < unicornSkins.length; i++) {
+    const x = startX + i * (skinWidth + padding);
+    const y = height/2;
+    
+    // Check if click is within this skin's box
+    if (mouseX >= x - skinWidth/2 && mouseX <= x + skinWidth/2 &&
+        mouseY >= y - skinHeight/2 && mouseY <= y + skinHeight/2) {
+      
+      // If skin is unlocked, select it
+      if (unicornSkins[i].unlocked) {
+        selectSkin(i);
+        // Play selection sound
+        playCollectSound();
+      } else {
+        // Try to unlock it
+        if (unlockSkin(i)) {
+          // Play unlock sound
+          playShieldSound();
+          // Add notification
+          addFloatingText(width/2, height/2 - 100, `${unicornSkins[i].name} Skin Unlocked!`);
+        } else {
+          // Not enough coins
+          addFloatingText(width/2, height/2 - 100, "Not enough coins!");
+        }
+      }
+      
+      break;
+    }
+  }
+}
+
+// Handle mouse clicks for skin selection
+function mousePressed() {
+  // Handle skin menu clicks
+  if (gameState === "skinMenu") {
+    handleSkinMenuClick();
+    return false; // Prevent default
+  }
+  
+  // Check if the skin hint was clicked (for mobile users)
+  if (gameState === "playing" && window.skinHintArea) {
+    const hint = window.skinHintArea;
+    if (mouseX >= hint.x && mouseX <= hint.x + hint.width &&
+        mouseY >= hint.y && mouseY <= hint.y + hint.height) {
+      // Open skin menu
+      gameState = "skinMenu";
+      // Play a sound for feedback
+      playCollectSound();
+      return false; // Prevent default
+    }
+  }
+  
+  return true; // Allow default behavior otherwise
 }
