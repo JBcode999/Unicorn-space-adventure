@@ -106,6 +106,57 @@ function preload() {
   // No sound preloading
 }
 
+// Function to verify game data integrity
+function verifyGameData() {
+  console.log("Verifying game data integrity...");
+  
+  // Check totalCoins
+  if (isNaN(totalCoins) || totalCoins < 0) {
+    console.error(`Invalid totalCoins: ${totalCoins}, resetting to 0`);
+    totalCoins = 0;
+  }
+  
+  // Check skin data
+  let skinDataValid = true;
+  unicornSkins.forEach((skin, index) => {
+    // Check if cost is valid
+    if (isNaN(skin.cost) || skin.cost < 0) {
+      console.error(`Invalid cost for skin ${skin.name}: ${skin.cost}`);
+      skin.cost = index * 500; // Reset to default cost
+      skinDataValid = false;
+    }
+    
+    // Ensure first skin is always unlocked
+    if (index === 0 && !skin.unlocked) {
+      console.warn("First skin should be unlocked by default, fixing...");
+      skin.unlocked = true;
+      skinDataValid = false;
+    }
+  });
+  
+  // Check currentSkinIndex
+  if (currentSkinIndex < 0 || currentSkinIndex >= unicornSkins.length || !unicornSkins[currentSkinIndex].unlocked) {
+    console.error(`Invalid currentSkinIndex: ${currentSkinIndex}, resetting to 0`);
+    currentSkinIndex = 0;
+    skinDataValid = false;
+  }
+  
+  // If any issues were found, save the corrected data
+  if (!skinDataValid) {
+    console.log("Fixed skin data issues, saving corrected data...");
+    saveGameData();
+  }
+  
+  console.log("Game data verification complete");
+  console.log(`Verified state - Coins: ${totalCoins}, Current Skin: ${currentSkinIndex}`);
+  
+  // Log all skins status
+  console.log("Skin status:");
+  unicornSkins.forEach((skin, index) => {
+    console.log(`${index}: ${skin.name} - Cost: ${skin.cost}, Unlocked: ${skin.unlocked}`);
+  });
+}
+
 function setup() {
   // Create a responsive canvas based on device size
   let canvasWidth = min(windowWidth - 40, 800);
@@ -155,6 +206,9 @@ function setup() {
   
   // Load saved game data
   loadGameData();
+  
+  // Verify game data integrity
+  verifyGameData();
   
   // Set up daily challenge
   setupDailyChallenge();
@@ -1227,6 +1281,13 @@ function keyPressed() {
     }
   }
   
+  // Check for the 'D' key to reset game data (debug)
+  if (key === 'd' || key === 'D') {
+    if (keyIsDown(SHIFT)) {
+      resetGameData();
+    }
+  }
+  
   // Check for ESC key to exit skin menu
   if (keyCode === ESCAPE && gameState === "skinMenu") {
     gameState = "playing";
@@ -2246,48 +2307,116 @@ function initAudio() {
 
 // Function to load saved game data from localStorage
 function loadGameData() {
+  console.log("Loading game data from localStorage...");
+  
   try {
     // Load total coins
     const savedCoins = localStorage.getItem('unicornGame_totalCoins');
     if (savedCoins !== null) {
-      totalCoins = parseInt(savedCoins);
+      const parsedCoins = parseInt(savedCoins);
+      if (!isNaN(parsedCoins) && parsedCoins >= 0) {
+        totalCoins = parsedCoins;
+        console.log(`Loaded coins: ${totalCoins}`);
+      } else {
+        console.warn(`Invalid saved coins value: ${savedCoins}, using default value`);
+        totalCoins = 0;
+      }
+    } else {
+      console.log("No saved coins found, using default value");
+      totalCoins = 0;
     }
     
     // Load unlocked skins
     const savedSkins = localStorage.getItem('unicornGame_skins');
     if (savedSkins !== null) {
-      const unlockedSkins = JSON.parse(savedSkins);
-      for (let i = 0; i < unicornSkins.length; i++) {
-        if (unlockedSkins[i]) {
-          unicornSkins[i].unlocked = true;
+      try {
+        const unlockedSkins = JSON.parse(savedSkins);
+        console.log(`Loaded skin data: ${savedSkins}`);
+        
+        // Ensure we have the right number of skins
+        if (unlockedSkins.length === unicornSkins.length) {
+          for (let i = 0; i < unicornSkins.length; i++) {
+            unicornSkins[i].unlocked = unlockedSkins[i] === true;
+            console.log(`Skin ${i} (${unicornSkins[i].name}): unlocked = ${unicornSkins[i].unlocked}`);
+          }
+        } else {
+          console.warn(`Mismatch in saved skins length: expected ${unicornSkins.length}, got ${unlockedSkins.length}`);
+          // Handle the case where saved data doesn't match current skins
+          // Only update the skins we have data for
+          for (let i = 0; i < Math.min(unicornSkins.length, unlockedSkins.length); i++) {
+            unicornSkins[i].unlocked = unlockedSkins[i] === true;
+          }
+          
+          // Ensure first skin is always unlocked
+          unicornSkins[0].unlocked = true;
         }
+      } catch (e) {
+        console.error("Error parsing saved skin data:", e);
+        // Reset to default - first skin unlocked
+        unicornSkins.forEach((skin, index) => {
+          skin.unlocked = index === 0;
+        });
       }
+    } else {
+      console.log("No saved skin data found, using default values");
+      // Reset to default - first skin unlocked
+      unicornSkins.forEach((skin, index) => {
+        skin.unlocked = index === 0;
+      });
     }
     
     // Load current skin
     const savedSkinIndex = localStorage.getItem('unicornGame_currentSkin');
     if (savedSkinIndex !== null) {
-      currentSkinIndex = parseInt(savedSkinIndex);
+      const index = parseInt(savedSkinIndex);
+      // Validate the index
+      if (index >= 0 && index < unicornSkins.length && unicornSkins[index].unlocked) {
+        currentSkinIndex = index;
+        console.log(`Loaded current skin index: ${currentSkinIndex} (${unicornSkins[currentSkinIndex].name})`);
+      } else {
+        console.warn(`Invalid saved skin index: ${index}, using default`);
+        currentSkinIndex = 0; // Reset to first skin
+      }
+    } else {
+      console.log("No saved current skin found, using default value");
+      currentSkinIndex = 0;
     }
     
     // Load challenge progress
     const savedChallengeProgress = localStorage.getItem('unicornGame_challengeProgress');
     if (savedChallengeProgress !== null) {
-      const challengeData = JSON.parse(savedChallengeProgress);
-      
-      // Only use saved challenge if it's from today
-      const today = new Date().toDateString();
-      if (challengeData.date === today) {
-        challengeProgress = challengeData.progress;
-        challengeCompleted = challengeData.completed;
-        gemsCollected = challengeData.gemsCollected || 0;
-        asteroidsDestroyed = challengeData.asteroidsDestroyed || 0;
+      try {
+        const challengeData = JSON.parse(savedChallengeProgress);
+        
+        // Only use saved challenge if it's from today
+        const today = new Date().toDateString();
+        if (challengeData.date === today) {
+          challengeProgress = challengeData.progress || 0;
+          challengeCompleted = challengeData.completed || false;
+          gemsCollected = challengeData.gemsCollected || 0;
+          asteroidsDestroyed = challengeData.asteroidsDestroyed || 0;
+        }
+      } catch (e) {
+        console.error("Error parsing saved challenge data:", e);
       }
     }
     
     console.log('Game data loaded successfully');
+    console.log(`Final loaded state - Coins: ${totalCoins}, Current Skin: ${currentSkinIndex}`);
+    
+    // Validate final state
+    if (isNaN(totalCoins)) {
+      console.error("totalCoins is NaN after loading, resetting to 0");
+      totalCoins = 0;
+    }
   } catch (e) {
     console.warn('Error loading game data:', e);
+    // Reset to safe defaults
+    totalCoins = 0;
+    currentSkinIndex = 0;
+    unicornSkins.forEach((skin, index) => {
+      skin.unlocked = index === 0;
+    });
   }
 }
 
@@ -2571,17 +2700,68 @@ function displaySkinMenuHint() {
 
 // Function to unlock a skin
 function unlockSkin(index) {
-  if (index < 0 || index >= unicornSkins.length) return false;
-  if (unicornSkins[index].unlocked) return true; // Already unlocked
+  if (index < 0 || index >= unicornSkins.length) {
+    console.error(`Invalid skin index: ${index}`);
+    return false;
+  }
+  
+  if (unicornSkins[index].unlocked) {
+    console.log(`Skin ${unicornSkins[index].name} is already unlocked`);
+    return true; // Already unlocked
+  }
   
   const cost = unicornSkins[index].cost;
+  console.log(`Attempting to unlock ${unicornSkins[index].name} skin. Cost: ${cost}, Available coins: ${totalCoins}`);
+  
+  // Validate that totalCoins is a number
+  if (isNaN(totalCoins)) {
+    console.error(`Invalid totalCoins value: ${totalCoins}`);
+    totalCoins = 0; // Reset to prevent further issues
+  }
+  
+  // Validate that cost is a number
+  if (isNaN(cost)) {
+    console.error(`Invalid cost for skin ${unicornSkins[index].name}: ${cost}`);
+    return false;
+  }
+  
   if (totalCoins >= cost) {
+    // Deduct coins
     totalCoins -= cost;
     unicornSkins[index].unlocked = true;
+    
+    // Force update localStorage immediately
+    try {
+      localStorage.setItem('unicornGame_totalCoins', totalCoins);
+      
+      // Save unlocked skins explicitly
+      const unlockedSkins = unicornSkins.map(skin => skin.unlocked);
+      localStorage.setItem('unicornGame_skins', JSON.stringify(unlockedSkins));
+      
+      console.log(`Successfully unlocked ${unicornSkins[index].name} skin. Remaining coins: ${totalCoins}`);
+      console.log(`Saved skins state: ${JSON.stringify(unlockedSkins)}`);
+      
+      // Add floating text notification
+      addFloatingText(width/2, height/2 - 150, `${unicornSkins[index].name} Skin Unlocked!`);
+      
+      // Play a sound effect
+      playShieldSound();
+    } catch (e) {
+      console.error('Error saving skin unlock state:', e);
+      // Try to recover by forcing a full save
+      try {
+        saveGameData();
+      } catch (e2) {
+        console.error('Failed to recover from save error:', e2);
+      }
+    }
+    
+    // Call the full save function
     saveGameData();
     return true;
   }
   
+  console.log(`Not enough coins to unlock ${unicornSkins[index].name} skin. Need ${cost}, have ${totalCoins}`);
   return false; // Not enough coins
 }
 
@@ -2597,6 +2777,16 @@ function selectSkin(index) {
 
 // Function to show the skin selection menu
 function showSkinMenu() {
+  // Debug information
+  console.log("=== Skin Menu Debug ===");
+  console.log(`Total Coins: ${totalCoins}`);
+  console.log("Available Skins:");
+  unicornSkins.forEach((skin, index) => {
+    console.log(`${index}: ${skin.name} - Cost: ${skin.cost}, Unlocked: ${skin.unlocked}`);
+  });
+  console.log("Current Skin Index:", currentSkinIndex);
+  console.log("=======================");
+
   // Semi-transparent overlay
   fill(0, 0, 0, 200);
   rect(0, 0, width, height);
@@ -2658,6 +2848,10 @@ function showSkinMenu() {
     } else if (skin.unlocked) {
       stroke(255);
       strokeWeight(2);
+    } else if (totalCoins >= skin.cost) {
+      // Highlight skins that can be unlocked
+      stroke(100, 255, 100); // Green
+      strokeWeight(3);
     } else {
       stroke(150);
       strokeWeight(1);
@@ -2666,6 +2860,9 @@ function showSkinMenu() {
     // Box background
     if (skin.unlocked) {
       fill(50, 50, 70);
+    } else if (totalCoins >= skin.cost) {
+      // Different background for skins that can be unlocked
+      fill(40, 60, 40);
     } else {
       fill(30, 30, 40);
     }
@@ -2703,6 +2900,10 @@ function showSkinMenu() {
     if (skin.unlocked) {
       fill(100, 255, 100);
       text("Unlocked", x, y + 60 * previewScale);
+    } else if (totalCoins >= skin.cost) {
+      // Highlight price when player has enough coins
+      fill(100, 255, 100); // Green
+      text(`Tap to Buy: ${skin.cost} coins`, x, y + 60 * previewScale);
     } else {
       fill(255, 215, 0);
       text(`${skin.cost} coins`, x, y + 60 * previewScale);
@@ -2767,22 +2968,41 @@ function handleSkinMenuClick() {
           mouseY >= skin.y - skin.height/2 && mouseY <= skin.y + skin.height/2) {
         
         const skinIndex = skin.index;
+        console.log(`Clicked on skin ${skinIndex}: ${unicornSkins[skinIndex].name}`);
         
         // If skin is unlocked, select it
         if (unicornSkins[skinIndex].unlocked) {
-          selectSkin(skinIndex);
-          // Play selection sound
-          playCollectSound();
+          console.log(`Selecting already unlocked skin: ${unicornSkins[skinIndex].name}`);
+          if (selectSkin(skinIndex)) {
+            // Play selection sound
+            playCollectSound();
+            // Add notification
+            addFloatingText(width/2, height/2 - 100, `${unicornSkins[skinIndex].name} Selected!`);
+          }
         } else {
           // Try to unlock it
+          console.log(`Attempting to unlock skin: ${unicornSkins[skinIndex].name}, Cost: ${unicornSkins[skinIndex].cost}, Available coins: ${totalCoins}`);
+          
+          // Debug info
+          console.log(`Total coins type: ${typeof totalCoins}, value: ${totalCoins}`);
+          console.log(`Skin cost type: ${typeof unicornSkins[skinIndex].cost}, value: ${unicornSkins[skinIndex].cost}`);
+          console.log(`Comparison result: ${totalCoins >= unicornSkins[skinIndex].cost}`);
+          
           if (unlockSkin(skinIndex)) {
+            console.log(`Successfully unlocked skin: ${unicornSkins[skinIndex].name}`);
             // Play unlock sound
             playShieldSound();
             // Add notification
             addFloatingText(width/2, height/2 - 100, `${unicornSkins[skinIndex].name} Skin Unlocked!`);
+            
+            // Automatically select the newly unlocked skin
+            selectSkin(skinIndex);
           } else {
+            console.log(`Failed to unlock skin: ${unicornSkins[skinIndex].name} - Not enough coins`);
             // Not enough coins
             addFloatingText(width/2, height/2 - 100, "Not enough coins!");
+            // Play error sound
+            playGameOverSound();
           }
         }
         
@@ -2919,4 +3139,34 @@ function playLaserSound() {
   // Start and stop
   oscillator.start();
   oscillator.stop(audioContext.currentTime + 0.2);
+}
+
+// Function to reset all game data in localStorage
+function resetGameData() {
+  console.log("Resetting all game data...");
+  
+  try {
+    // Clear all game-related localStorage items
+    localStorage.removeItem('unicornGame_totalCoins');
+    localStorage.removeItem('unicornGame_skins');
+    localStorage.removeItem('unicornGame_currentSkin');
+    localStorage.removeItem('unicornGame_challengeProgress');
+    
+    // Reset in-memory values
+    totalCoins = 0;
+    currentSkinIndex = 0;
+    
+    // Reset skins to default state
+    unicornSkins.forEach((skin, index) => {
+      // Only the first skin (Classic) is unlocked by default
+      skin.unlocked = index === 0;
+    });
+    
+    console.log("Game data reset complete");
+    
+    // Show notification
+    addFloatingText(width/2, height/2, "Game Data Reset!");
+  } catch (e) {
+    console.error("Error resetting game data:", e);
+  }
 }
