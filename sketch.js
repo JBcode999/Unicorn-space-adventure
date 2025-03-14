@@ -37,10 +37,38 @@ let asteroidsDestroyed = 0;
 
 // 2. Unlockable Unicorn Skins
 let unicornSkins = [
-  { name: "Classic", cost: 0, unlocked: true, bodyColor: [255, 230, 250] },
-  { name: "Galaxy", cost: 500, unlocked: false, bodyColor: [80, 50, 120] },
-  { name: "Rainbow", cost: 1000, unlocked: false, bodyColor: [255, 150, 200] },
-  { name: "Robot", cost: 2000, unlocked: false, bodyColor: [180, 180, 200] }
+  { 
+    name: "Classic", 
+    cost: 0, 
+    unlocked: true, 
+    bodyColor: [255, 230, 250],
+    ability: "none",
+    description: "The original unicorn"
+  },
+  { 
+    name: "Galaxy", 
+    cost: 500, 
+    unlocked: false, 
+    bodyColor: [80, 50, 120],
+    ability: "biggerShield",
+    description: "50% larger shield"
+  },
+  { 
+    name: "Rainbow", 
+    cost: 1000, 
+    unlocked: false, 
+    bodyColor: [255, 150, 200],
+    ability: "shotgunLaser",
+    description: "Triple laser blast"
+  },
+  { 
+    name: "Robot", 
+    cost: 2000, 
+    unlocked: false, 
+    bodyColor: [180, 180, 200],
+    ability: "fasterLaser",
+    description: "Rapid-fire lasers"
+  }
 ];
 let currentSkinIndex = 0;
 let totalCoins = 0;
@@ -292,7 +320,13 @@ function draw() {
     
     // Add laser if player shot one automatically
     if (newLaser) {
-      lasers.push(newLaser);
+      if (Array.isArray(newLaser)) {
+        // Handle multiple lasers (shotgun ability)
+        lasers.push(...newLaser);
+      } else {
+        // Handle single laser
+        lasers.push(newLaser);
+      }
     }
     
     // Update laser timer if active
@@ -795,8 +829,15 @@ class Player {
   shootLaser(isAutomatic = false) {
     if (!this.hasLaser) return null;
     
+    // Get current skin ability
+    const currentAbility = unicornSkins[currentSkinIndex].ability;
+    
     // Check cooldown (skip for automatic shooting since it's handled by the timer)
-    if (!isAutomatic && frameCount - this.lastShotTime < this.shootCooldown) return null;
+    if (!isAutomatic) {
+      // Faster laser for Robot skin
+      const cooldown = currentAbility === "fasterLaser" ? Math.floor(this.shootCooldown / 2) : this.shootCooldown;
+      if (frameCount - this.lastShotTime < cooldown) return null;
+    }
     
     // Update last shot time
     this.lastShotTime = frameCount;
@@ -806,8 +847,28 @@ class Player {
       playLaserSound();
     }
     
-    // Create new laser
-    return new Laser(this.pos.x, this.pos.y - this.size/2);
+    // Handle different laser types based on skin ability
+    if (currentAbility === "shotgunLaser") {
+      // Rainbow skin: Triple laser blast (shotgun style)
+      const lasers = [];
+      
+      // Center laser
+      lasers.push(new Laser(this.pos.x, this.pos.y - this.size/2));
+      
+      // Side lasers (angled)
+      const leftLaser = new Laser(this.pos.x - 10, this.pos.y - this.size/2);
+      leftLaser.vel = createVector(-1, -9).normalize().mult(10); // Angled left
+      lasers.push(leftLaser);
+      
+      const rightLaser = new Laser(this.pos.x + 10, this.pos.y - this.size/2);
+      rightLaser.vel = createVector(1, -9).normalize().mult(10); // Angled right
+      lasers.push(rightLaser);
+      
+      return lasers;
+    } else {
+      // Standard single laser for other skins
+      return new Laser(this.pos.x, this.pos.y - this.size/2);
+    }
   }
   
   show() {
@@ -824,6 +885,9 @@ class Player {
         opacity = map(sin(frameCount * 0.5), -1, 1, 40, 180);
       }
       
+      // Check if player has faster laser ability (Robot skin)
+      const hasFasterLaser = unicornSkins[currentSkinIndex].ability === "fasterLaser";
+      
       // Draw rainbow laser aura
       noFill();
       for (let i = 0; i < 7; i++) {
@@ -837,7 +901,9 @@ class Player {
         // Draw zigzag pattern around unicorn
         beginShape();
         for (let a = 0; a < TWO_PI; a += PI/8) {
-          let r = auraSize/2 * (1 + sin(a * 8 + frameCount * 0.1) * 0.1);
+          // More jagged pattern for Robot skin with faster lasers
+          let jaggedness = hasFasterLaser ? 0.2 : 0.1;
+          let r = auraSize/2 * (1 + sin(a * 8 + frameCount * (hasFasterLaser ? 0.2 : 0.1)) * jaggedness);
           vertex(cos(a) * r, sin(a) * r);
         }
         endShape(CLOSE);
@@ -845,12 +911,26 @@ class Player {
       }
       
       // Draw small laser beams coming from horn
-      if (frameCount % 10 < 5) { // Blink effect
+      if (frameCount % (hasFasterLaser ? 5 : 10) < (hasFasterLaser ? 3 : 5)) { // Faster blink for Robot skin
         colorMode(HSB, 360, 100, 100, 255);
         let hue = (frameCount * 10) % 360;
         stroke(hue, 90, 100, 200);
         strokeWeight(2);
-        line(0, -this.size * 0.8, random(-10, 10), -this.size * 1.2);
+        
+        // Draw more laser beams for Robot skin
+        if (hasFasterLaser) {
+          // Multiple laser beams
+          for (let i = 0; i < 3; i++) {
+            let angle = random(-0.3, 0.3);
+            line(0, -this.size * 0.8, 
+                 cos(angle) * this.size * 0.5, 
+                 -this.size * 1.2 - sin(angle) * this.size * 0.5);
+          }
+        } else {
+          // Single laser beam
+          line(0, -this.size * 0.8, random(-10, 10), -this.size * 1.2);
+        }
+        
         colorMode(RGB, 255, 255, 255, 255);
       }
     }
@@ -865,17 +945,53 @@ class Player {
         opacity = map(sin(frameCount * 0.5), -1, 1, 40, 180);
       }
       
+      // Check if player has bigger shield ability (Galaxy skin)
+      const hasBiggerShield = unicornSkins[currentSkinIndex].ability === "biggerShield";
+      
       // Draw rainbow shield aura
       noFill();
       for (let i = 0; i < 7; i++) {
-        let shieldSize = this.size * 2.2 * pulseAmount;
-        let hue = (frameCount * 2 + i * 30) % 360;
+        // Bigger shield for Galaxy skin (50% larger)
+        let shieldSize = this.size * (hasBiggerShield ? 3.3 : 2.2) * pulseAmount;
         
-        colorMode(HSB, 360, 100, 100, 255);
-        stroke(hue, 90, 100, opacity);
-        strokeWeight(3);
-        ellipse(0, 0, shieldSize, shieldSize);
-        colorMode(RGB, 255, 255, 255, 255);
+        // Special galaxy shield effect for Galaxy skin
+        if (hasBiggerShield) {
+          // Use space-themed colors for Galaxy skin shield
+          colorMode(HSB, 360, 100, 100, 255);
+          let hue = ((frameCount * 1.5) + i * 40) % 360;
+          // More blue/purple hues for galaxy theme
+          let adjustedHue = (hue + 240) % 360;
+          stroke(adjustedHue, 80, 100, opacity);
+          strokeWeight(3);
+          
+          // Draw galaxy shield with stars
+          ellipse(0, 0, shieldSize, shieldSize);
+          
+          // Add small stars to the shield
+          if (i === 0 && frameCount % 5 === 0) {
+            for (let j = 0; j < 5; j++) {
+              let starAngle = random(TWO_PI);
+              let starDist = random(shieldSize * 0.3, shieldSize * 0.5);
+              let starX = cos(starAngle) * starDist;
+              let starY = sin(starAngle) * starDist;
+              let starSize = random(2, 5);
+              
+              fill(random(200, 360), 70, 100, random(150, 255));
+              noStroke();
+              ellipse(starX, starY, starSize, starSize);
+            }
+          }
+          
+          colorMode(RGB, 255, 255, 255, 255);
+        } else {
+          // Regular rainbow shield for other skins
+          let hue = (frameCount * 2 + i * 30) % 360;
+          colorMode(HSB, 360, 100, 100, 255);
+          stroke(hue, 90, 100, opacity);
+          strokeWeight(3);
+          ellipse(0, 0, shieldSize, shieldSize);
+          colorMode(RGB, 255, 255, 255, 255);
+        }
       }
     }
     
@@ -915,11 +1031,58 @@ class Player {
     fill(255, 215, 0); // Gold
     stroke(255, 240, 200);
     strokeWeight(2);
-    beginShape();
-    vertex(-this.size * 0.15, -this.size * 0.9);
-    vertex(0, -this.size * 1.4);
-    vertex(this.size * 0.15, -this.size * 0.9);
-    endShape(CLOSE);
+    
+    // Special horn for Rainbow skin (triple horn for shotgun laser)
+    if (unicornSkins[currentSkinIndex].ability === "shotgunLaser" && this.hasLaser) {
+      // Center horn
+      beginShape();
+      vertex(-this.size * 0.05, -this.size * 0.9);
+      vertex(0, -this.size * 1.4);
+      vertex(this.size * 0.05, -this.size * 0.9);
+      endShape(CLOSE);
+      
+      // Side horns (smaller)
+      // Left horn
+      beginShape();
+      vertex(-this.size * 0.25, -this.size * 0.85);
+      vertex(-this.size * 0.15, -this.size * 1.2);
+      vertex(-this.size * 0.05, -this.size * 0.85);
+      endShape(CLOSE);
+      
+      // Right horn
+      beginShape();
+      vertex(this.size * 0.05, -this.size * 0.85);
+      vertex(this.size * 0.15, -this.size * 1.2);
+      vertex(this.size * 0.25, -this.size * 0.85);
+      endShape(CLOSE);
+      
+      // Add rainbow glow to all three horns
+      if (frameCount % 5 < 3) {
+        noFill();
+        for (let i = 0; i < 3; i++) {
+          colorMode(HSB, 360, 100, 100, 255);
+          let hue = (frameCount * 20 + i * 120) % 360; // Cycle through rainbow colors
+          stroke(hue, 90, 100, 150);
+          strokeWeight(1 + i * 0.5);
+          
+          // Center horn glow
+          line(0, -this.size * 0.9, 0, -this.size * 1.5);
+          
+          // Side horn glows
+          line(-this.size * 0.15, -this.size * 0.85, -this.size * 0.15, -this.size * 1.3);
+          line(this.size * 0.15, -this.size * 0.85, this.size * 0.15, -this.size * 1.3);
+          
+          colorMode(RGB, 255, 255, 255, 255);
+        }
+      }
+    } else {
+      // Regular horn for other skins
+      beginShape();
+      vertex(-this.size * 0.15, -this.size * 0.9);
+      vertex(0, -this.size * 1.4);
+      vertex(this.size * 0.15, -this.size * 0.9);
+      endShape(CLOSE);
+    }
     
     // Add sparkly detail to horn
     noStroke();
@@ -941,8 +1104,19 @@ class Player {
   }
   
   hits(obj) {
+    // Get distance between player and object
     let d = dist(this.pos.x, this.pos.y, obj.pos.x, obj.pos.y);
-    return d < this.hitRadius + obj.size / 2; // Adjusted collision detection
+    
+    // If player has shield and Galaxy skin, increase effective shield radius
+    if (hasShield && unicornSkins[currentSkinIndex].ability === "biggerShield") {
+      // Check if object is within the bigger shield radius
+      // This makes the Galaxy skin's shield more effective at blocking asteroids
+      let biggerShieldRadius = this.size * 1.65; // 50% larger shield radius
+      return d < biggerShieldRadius + obj.size / 2;
+    }
+    
+    // Normal collision detection
+    return d < this.hitRadius + obj.size / 2;
   }
 }
 
@@ -2903,6 +3077,13 @@ function showSkinMenu() {
     if (skin.unlocked) {
       fill(100, 255, 100);
       text("Unlocked", x, y + 60 * previewScale);
+      
+      // Display skin ability description
+      if (skin.ability !== "none") {
+        fill(255, 200, 100); // Orange-yellow for abilities
+        textSize(Math.max(8, 12 * previewScale));
+        text(skin.description, x, y + 75 * previewScale);
+      }
     } else if (totalCoins >= skin.cost) {
       // Highlight price when player has enough coins
       fill(100, 255, 100); // Green
@@ -2926,9 +3107,23 @@ function showSkinMenu() {
       } else {
         text(`Tap to Buy: ${skin.cost} coins`, x, y + 60 * previewScale);
       }
+      
+      // Display skin ability description
+      if (skin.ability !== "none") {
+        fill(255, 200, 100); // Orange-yellow for abilities
+        textSize(Math.max(8, 12 * previewScale));
+        text(skin.description, x, y + 75 * previewScale);
+      }
     } else {
       fill(255, 215, 0);
       text(`${skin.cost} coins`, x, y + 60 * previewScale);
+      
+      // Display skin ability description (grayed out)
+      if (skin.ability !== "none") {
+        fill(150, 150, 100); // Grayed out orange-yellow
+        textSize(Math.max(8, 12 * previewScale));
+        text(skin.description, x, y + 75 * previewScale);
+      }
     }
   }
   
