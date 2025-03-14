@@ -97,6 +97,9 @@ let backgroundMusic = {
 let audioInitialized = false;
 let showAudioPrompt = false;
 
+// Add global variables for lasers
+let lasers = [];
+
 // NO SOUND FUNCTIONALITY
 
 function preload() {
@@ -220,17 +223,73 @@ function draw() {
     if (frameCount % max(5, 60 - level/2) === 0 && random() > 0.3 - level/200) spawnGem();
     if (frameCount % max(3, 45 - level/2) === 0 && random() > 0.2 - level/200) spawnAsteroid();
     
-    // Spawn power-ups very rarely (about once every 15-20 seconds)
+    // Spawn power-ups more frequently (about once every 8-10 seconds)
     // Increase spawn rate during special events
-    let powerUpChance = 0.7;
+    let powerUpChance = 0.5; // Lower value = higher chance (was 0.7)
     if (isSpecialEvent && specialEventType === 'moreShields') {
       powerUpChance = 0.3; // Much higher chance during shield event
     }
-    if (frameCount % 900 === 0 && random() > powerUpChance) spawnPowerUp();
+    // Spawn power-ups more frequently (every 480 frames instead of 900)
+    if (frameCount % 480 === 0 && random() > powerUpChance) spawnPowerUp();
     
     // Update and display player
-    player.update();
+    const newLaser = player.update();
     player.show();
+    
+    // Add laser if player shot one automatically
+    if (newLaser) {
+      lasers.push(newLaser);
+    }
+    
+    // Update laser timer if active
+    if (player.hasLaser) {
+      player.laserTimer--;
+      if (player.laserTimer <= 0) {
+        player.hasLaser = false;
+        addFloatingText(player.pos.x, player.pos.y - 50, "Laser Depleted!");
+      }
+    }
+    
+    // Update and show lasers
+    for (let i = lasers.length - 1; i >= 0; i--) {
+      lasers[i].update();
+      lasers[i].show();
+      
+      // Check for laser hits on asteroids
+      for (let j = asteroids.length - 1; j >= 0; j--) {
+        if (lasers[i].hits(asteroids[j])) {
+          // Create explosion effect
+          createExplosionEffect(asteroids[j].pos.x, asteroids[j].pos.y);
+          
+          // Play asteroid destroy sound
+          playAsteroidDestroySound();
+          
+          // Add score
+          score += 50;
+          addFloatingScore(asteroids[j].pos.x, asteroids[j].pos.y, 50);
+          
+          // Remove asteroid
+          asteroids.splice(j, 1);
+          
+          // Update challenge progress
+          updateChallengeProgress("asteroids", 1);
+          
+          // Reduce penetration count
+          lasers[i].penetration--;
+          
+          // Deactivate laser if it has no more penetration
+          if (lasers[i].penetration <= 0) {
+            lasers[i].active = false;
+            break;
+          }
+        }
+      }
+      
+      // Remove inactive lasers
+      if (!lasers[i].active) {
+        lasers.splice(i, 1);
+      }
+    }
     
     // Update and manage gems
     for (let i = gems.length - 1; i >= 0; i--) {
@@ -289,29 +348,33 @@ function draw() {
     
     // Update and manage power-ups
     for (let i = powerUps.length - 1; i >= 0; i--) {
-      powerUps[i].show();
       let isOffScreen = powerUps[i].update();
+      powerUps[i].show();
       
       // Check for collision with player
       if (player.hits(powerUps[i])) {
-        // Activate shield
-        hasShield = true;
-        shieldTimer = shieldDuration;
+        // Apply power-up effect based on type
+        if (powerUps[i].type === "shield") {
+          // Shield power-up
+          hasShield = true;
+          shieldTimer = shieldDuration;
+          addFloatingText(player.pos.x, player.pos.y - 50, "Shield Activated!");
+          playShieldSound();
+        } else if (powerUps[i].type === "laser") {
+          // Laser power-up
+          player.hasLaser = true;
+          player.laserTimer = player.laserDuration;
+          addFloatingText(player.pos.x, player.pos.y - 50, "Rainbow Lasers!");
+          playLaserSound();
+        }
         
-        // Play shield activation sound
-        playShieldSound();
-        
-        // Create sparkle effect at power-up position
-        createSparkleEffect(powerUps[i].pos.x, powerUps[i].pos.y, color(100, 255, 255));
-        
-        // Add floating text
-        addFloatingText(powerUps[i].pos.x, powerUps[i].pos.y, "SHIELD!");
-        
-        // Remove the collected power-up
+        // Remove power-up
         powerUps.splice(i, 1);
-      } 
-      // Remove if off screen
-      else if (isOffScreen) {
+        continue;
+      }
+      
+      // Remove if off-screen
+      if (isOffScreen) {
         powerUps.splice(i, 1);
       }
     }
@@ -561,6 +624,14 @@ class Player {
     this.hitRadius = this.size * 0.8; // Collision radius
     this.lastPos = this.pos.copy(); // Store last position for movement detection
     this.trailTimer = 0; // Add timer for controlling trail frequency
+    
+    // Laser power-up properties
+    this.hasLaser = false;
+    this.laserTimer = 0;
+    this.laserDuration = 900; // 15 seconds at 60fps (was 600 = 10 seconds)
+    this.lastShotTime = 0;
+    this.shootCooldown = 15; // Frames between shots
+    this.autoShootTimer = 0; // Timer for automatic shooting
   }
   
   update() {
@@ -582,6 +653,15 @@ class Player {
     // Keep player within screen bounds
     this.pos.x = constrain(this.pos.x, this.size, width - this.size);
     this.pos.y = constrain(this.pos.y, this.size, height - this.size);
+    
+    // Automatic shooting when laser power-up is active
+    if (this.hasLaser) {
+      this.autoShootTimer++;
+      if (this.autoShootTimer >= this.shootCooldown) {
+        this.autoShootTimer = 0;
+        return this.shootLaser(true); // true indicates automatic shooting
+      }
+    }
     
     // Generate rainbow trail particles if moved, but with more magical patterns
     if (dist(this.pos.x, this.pos.y, this.lastPos.x, this.lastPos.y) > 0.5) {
@@ -654,11 +734,72 @@ class Player {
         rainbowTrail.shift();
       }
     }
+    
+    return null; // No laser shot this frame
+  }
+  
+  shootLaser(isAutomatic = false) {
+    if (!this.hasLaser) return null;
+    
+    // Check cooldown (skip for automatic shooting since it's handled by the timer)
+    if (!isAutomatic && frameCount - this.lastShotTime < this.shootCooldown) return null;
+    
+    // Update last shot time
+    this.lastShotTime = frameCount;
+    
+    // Play laser sound (less frequently for automatic shooting to avoid sound overload)
+    if (!isAutomatic || frameCount % 30 === 0) {
+      playLaserSound();
+    }
+    
+    // Create new laser
+    return new Laser(this.pos.x, this.pos.y - this.size/2);
   }
   
   show() {
     push();
     translate(this.pos.x, this.pos.y);
+    
+    // Draw laser power-up effect if active
+    if (this.hasLaser) {
+      // Rainbow laser aura
+      let pulseAmount = map(sin(frameCount * 0.2), -1, 1, 0.8, 1.2);
+      let opacity = map(this.laserTimer, 0, this.laserDuration, 50, 180);
+      if (this.laserTimer < 100) {
+        // Make laser aura flash when about to expire
+        opacity = map(sin(frameCount * 0.5), -1, 1, 40, 180);
+      }
+      
+      // Draw rainbow laser aura
+      noFill();
+      for (let i = 0; i < 7; i++) {
+        let auraSize = this.size * 2.2 * pulseAmount;
+        let hue = (frameCount * 5 + i * 30) % 360;
+        
+        colorMode(HSB, 360, 100, 100, 255);
+        stroke(hue, 90, 100, opacity);
+        strokeWeight(2);
+        
+        // Draw zigzag pattern around unicorn
+        beginShape();
+        for (let a = 0; a < TWO_PI; a += PI/8) {
+          let r = auraSize/2 * (1 + sin(a * 8 + frameCount * 0.1) * 0.1);
+          vertex(cos(a) * r, sin(a) * r);
+        }
+        endShape(CLOSE);
+        colorMode(RGB, 255, 255, 255, 255);
+      }
+      
+      // Draw small laser beams coming from horn
+      if (frameCount % 10 < 5) { // Blink effect
+        colorMode(HSB, 360, 100, 100, 255);
+        let hue = (frameCount * 10) % 360;
+        stroke(hue, 90, 100, 200);
+        strokeWeight(2);
+        line(0, -this.size * 0.8, random(-10, 10), -this.size * 1.2);
+        colorMode(RGB, 255, 255, 255, 255);
+      }
+    }
     
     // Draw shield if active
     if (hasShield) {
@@ -1097,6 +1238,7 @@ function resetGame() {
   gems = [];
   asteroids = [];
   powerUps = []; // Clear power-ups
+  lasers = []; // Clear lasers
   score = 0;
   distanceTraveled = 0;
   level = 1;
@@ -1560,6 +1702,7 @@ class PowerUp {
     this.rotationSpeed = 0.04;
     this.glowAmount = 0;
     this.glowSpeed = 0.1;
+    this.type = "shield"; // Default type is shield
   }
   
   randomPosition() {
@@ -1660,7 +1803,65 @@ class PowerUp {
 
 // Function to spawn a shield power-up
 function spawnPowerUp() {
-  powerUps.push(new PowerUp());
+  // Increase the chance of laser power-ups to 70% (was 50%)
+  if (random() < 0.3) {
+    powerUps.push(new PowerUp()); // Shield power-up (30% chance)
+  } else {
+    powerUps.push(new LaserPowerUp()); // Laser power-up (70% chance)
+  }
+}
+
+// Laser Power-Up class
+class LaserPowerUp extends PowerUp {
+  constructor() {
+    super(); // Call parent constructor
+    this.type = "laser"; // Set type to laser
+  }
+  
+  show() {
+    push();
+    translate(this.pos.x, this.pos.y);
+    rotate(this.angle);
+    
+    // Draw glow effect
+    for (let i = 3; i > 0; i--) {
+      let glowSize = this.size * (1 + this.glowAmount) + i * 5;
+      let alpha = map(i, 3, 1, 50, 150);
+      
+      // Rainbow color based on frame
+      colorMode(HSB, 360, 100, 100, 255);
+      let hue = (frameCount * 2) % 360;
+      fill(hue, 90, 100, alpha);
+      noStroke();
+      ellipse(0, 0, glowSize, glowSize);
+      colorMode(RGB, 255, 255, 255, 255);
+    }
+    
+    // Draw main laser icon
+    fill(255, 100, 100);
+    stroke(255, 200, 200);
+    strokeWeight(2);
+    ellipse(0, 0, this.size, this.size);
+    
+    // Draw laser symbol inside
+    stroke(255, 50, 50);
+    strokeWeight(3);
+    
+    // Draw a lightning bolt or laser beam symbol
+    beginShape();
+    vertex(-this.size * 0.2, -this.size * 0.3);
+    vertex(0, 0);
+    vertex(-this.size * 0.2, this.size * 0.3);
+    endShape();
+    
+    beginShape();
+    vertex(this.size * 0.2, -this.size * 0.3);
+    vertex(0, 0);
+    vertex(this.size * 0.2, this.size * 0.3);
+    endShape();
+    
+    pop();
+  }
 }
 
 // Function to add floating text (general version of addFloatingScore)
@@ -2344,6 +2545,26 @@ function displaySkinMenuHint() {
     pop();
   }
   
+  // Show laser active message if player has laser power-up
+  if (player.hasLaser) {
+    let laserY = height - 40;
+    let laserMessage = "Rainbow Lasers Active!";
+    
+    // Draw the text with rainbow colors
+    textAlign(LEFT);
+    for (let i = 0; i < laserMessage.length; i++) {
+      // Calculate hue based on character position and time
+      let hue = (frameCount * 5 + i * 15) % 360;
+      fill(hue, 90, 100);
+      text(laserMessage.charAt(i), x + i * 8, laserY);
+    }
+    
+    // Add subtle pulsing glow behind text
+    noStroke();
+    fill(0, 0, 100, 20 * pulseAmount);
+    rect(x - 10, laserY - 15, laserMessage.length * 8 + 20, 20, 5);
+  }
+  
   // Switch back to RGB color mode
   colorMode(RGB, 255, 255, 255, 255);
 }
@@ -2593,4 +2814,109 @@ function mousePressed() {
   }
   
   return true; // Allow default behavior otherwise
+}
+
+// Laser class for projectiles
+class Laser {
+  constructor(x, y) {
+    this.pos = createVector(x, y);
+    this.vel = createVector(0, -10); // Move upward
+    this.width = 8; // Increased from 5
+    this.height = 25; // Increased from 20
+    this.active = true;
+    this.hue = random(360); // Random starting hue
+    this.penetration = 2; // Number of asteroids it can destroy before disappearing
+    this.trail = []; // Array to store trail positions
+    this.maxTrailLength = 5; // Maximum number of trail segments
+  }
+  
+  update() {
+    // Add current position to trail
+    this.trail.push(this.pos.copy());
+    
+    // Limit trail length
+    if (this.trail.length > this.maxTrailLength) {
+      this.trail.shift();
+    }
+    
+    // Move the laser
+    this.pos.add(this.vel);
+    
+    // Deactivate if off screen
+    if (this.pos.y < -this.height) {
+      this.active = false;
+    }
+    
+    // Update hue for rainbow effect
+    this.hue = (this.hue + 10) % 360;
+  }
+  
+  show() {
+    push();
+    colorMode(HSB, 360, 100, 100, 255);
+    
+    // Draw trail
+    for (let i = 0; i < this.trail.length; i++) {
+      let pos = this.trail[i];
+      let alpha = map(i, 0, this.trail.length - 1, 50, 200);
+      let size = map(i, 0, this.trail.length - 1, this.width * 0.5, this.width);
+      
+      // Draw trail segment
+      noStroke();
+      fill((this.hue + i * 20) % 360, 90, 100, alpha);
+      ellipse(pos.x, pos.y - this.height/2, size, size);
+    }
+    
+    // Draw rainbow laser beam
+    noStroke();
+    
+    // Draw glow effect
+    for (let i = 3; i > 0; i--) {
+      let glowWidth = this.width + i * 3;
+      let glowHeight = this.height + i * 5;
+      let alpha = map(i, 3, 1, 50, 200);
+      
+      fill((this.hue + i * 30) % 360, 90, 100, alpha);
+      ellipse(this.pos.x, this.pos.y - this.height/2, glowWidth, glowHeight);
+    }
+    
+    // Draw main beam
+    fill(this.hue, 90, 100);
+    ellipse(this.pos.x, this.pos.y - this.height/2, this.width, this.height);
+    
+    colorMode(RGB, 255, 255, 255, 255);
+    pop();
+  }
+  
+  // Check if laser hits an asteroid
+  hits(asteroid) {
+    let d = dist(this.pos.x, this.pos.y, asteroid.pos.x, asteroid.pos.y);
+    return d < asteroid.size/2 + this.width/2;
+  }
+}
+
+// Function to play laser sound
+function playLaserSound() {
+  if (!audioContext) return;
+  
+  // Create oscillator
+  const oscillator = audioContext.createOscillator();
+  const gainNode = audioContext.createGain();
+  
+  // Connect nodes
+  oscillator.connect(gainNode);
+  gainNode.connect(audioContext.destination);
+  
+  // Set oscillator type and frequency
+  oscillator.type = 'sine';
+  oscillator.frequency.setValueAtTime(880, audioContext.currentTime);
+  oscillator.frequency.exponentialRampToValueAtTime(1760, audioContext.currentTime + 0.1);
+  
+  // Set volume envelope
+  gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+  gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
+  
+  // Start and stop
+  oscillator.start();
+  oscillator.stop(audioContext.currentTime + 0.2);
 }
