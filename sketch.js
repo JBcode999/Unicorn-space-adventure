@@ -27,6 +27,35 @@ Object.defineProperty(window, 'gameState', {
   get: function() { return gameState; }
 });
 
+// Variables for the game
+let audioContext; // Add audio context for sound effects
+// Background music variables
+let backgroundMusic = {
+  isPlaying: false,
+  oscillators: [],
+  gainNodes: [],
+  noteIndex: 0,
+  nextNoteTime: 0,
+  tempo: 120, // Beats per minute
+  sequence: [
+    { note: 'C4', duration: 0.5 },
+    { note: 'E4', duration: 0.5 },
+    { note: 'G4', duration: 0.5 },
+    { note: 'C5', duration: 0.5 },
+    { note: 'G4', duration: 0.5 },
+    { note: 'E4', duration: 0.5 },
+    { note: 'A4', duration: 0.5 },
+    { note: 'F4', duration: 0.5 },
+    { note: 'D4', duration: 0.5 },
+    { note: 'F4', duration: 0.5 },
+    { note: 'A4', duration: 0.5 },
+    { note: 'F4', duration: 0.5 },
+    { note: 'G4', duration: 1.0 },
+    { note: 'E4', duration: 1.0 }
+  ],
+  timer: null
+};
+
 // NO SOUND FUNCTIONALITY
 
 function preload() {
@@ -41,6 +70,19 @@ function setup() {
   // Create canvas with responsive dimensions
   let canvas = createCanvas(canvasWidth, canvasHeight);
   canvas.parent('game-container');
+  
+  // Initialize audio context for sound effects
+  try {
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    
+    // Start background music after a short delay to ensure audio context is ready
+    setTimeout(() => {
+      startBackgroundMusic();
+    }, 1000);
+  } catch(e) {
+    console.warn('Web Audio API not supported in this browser');
+    audioContext = null;
+  }
   
   // Initialize game
   player = new Player();
@@ -116,6 +158,9 @@ function draw() {
         // Add to score
         score += gems[i].value;
         
+        // Play collect sound
+        playCollectSound();
+        
         // Create sparkle effect at gem position
         createSparkleEffect(gems[i].pos.x, gems[i].pos.y, gems[i].color);
         
@@ -141,6 +186,9 @@ function draw() {
         // Activate shield
         hasShield = true;
         shieldTimer = shieldDuration;
+        
+        // Play shield activation sound
+        playShieldSound();
         
         // Create sparkle effect at power-up position
         createSparkleEffect(powerUps[i].pos.x, powerUps[i].pos.y, color(100, 255, 255));
@@ -169,6 +217,9 @@ function draw() {
           // Create explosion effect for asteroid
           createExplosionEffect(asteroids[i].pos.x, asteroids[i].pos.y);
           
+          // Play asteroid destruction sound
+          playAsteroidDestroySound();
+          
           // Add points for destroying asteroid with shield
           score += 25;
           
@@ -186,6 +237,8 @@ function draw() {
         
         // Normal game over if no shield
         gameState = "gameover";
+        // Play game over sound
+        playGameOverSound();
         // Create explosion effect when player hits asteroid
         createExplosionEffect(player.pos.x, player.pos.y);
         
@@ -847,6 +900,15 @@ function keyPressed() {
   if (key === 'r' || key === 'R') {
     resetGame();
   }
+  
+  // Check for the 'M' key to toggle music
+  if (key === 'm' || key === 'M') {
+    if (backgroundMusic.isPlaying) {
+      stopBackgroundMusic();
+    } else {
+      startBackgroundMusic();
+    }
+  }
 }
 
 function resetGame() {
@@ -866,9 +928,17 @@ function resetGame() {
   // Reset shield state
   hasShield = false;
   shieldTimer = 0;
+  
+  // Restart background music if it was stopped
+  if (!backgroundMusic.isPlaying && audioContext) {
+    startBackgroundMusic();
+  }
 }
 
 function updateGameDifficulty() {
+  // Get previous level to check for level up
+  let previousLevel = level;
+  
   // Increase level more gradually but with no cap (internal tracking only)
   // Every 500 distance = 1 level
   level = floor(distanceTraveled / 500) + 1;
@@ -1445,4 +1515,257 @@ function createShieldBurst(x, y) {
       y + random(-20, 20)
     );
   }
+}
+
+// Function to play a simple sound when collecting a gem
+function playCollectSound() {
+  if (!audioContext) return; // Skip if audio context not available
+  
+  try {
+    // Create an oscillator
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    // Connect oscillator to gain node and gain node to destination
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    // Set oscillator properties
+    oscillator.type = 'sine'; // 'sine', 'square', 'sawtooth', 'triangle'
+    oscillator.frequency.setValueAtTime(880, audioContext.currentTime); // A5 note
+    oscillator.frequency.exponentialRampToValueAtTime(440, audioContext.currentTime + 0.1); // Slide down to A4
+    
+    // Set gain (volume) to avoid clipping
+    gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+    
+    // Start and stop the oscillator
+    oscillator.start();
+    oscillator.stop(audioContext.currentTime + 0.1);
+  } catch(e) {
+    console.warn('Error playing sound:', e);
+  }
+}
+
+// Function to play shield activation sound
+function playShieldSound() {
+  if (!audioContext) return; // Skip if audio context not available
+  
+  try {
+    // Create oscillator and gain nodes
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    // Connect nodes
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    // Set oscillator properties - upward sweep for shield activation
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(220, audioContext.currentTime); // Start at A3
+    oscillator.frequency.exponentialRampToValueAtTime(880, audioContext.currentTime + 0.3); // Sweep up to A5
+    
+    // Set gain with a longer sustain for shield sound
+    gainNode.gain.setValueAtTime(0.01, audioContext.currentTime);
+    gainNode.gain.linearRampToValueAtTime(0.3, audioContext.currentTime + 0.1); // Quick ramp up
+    gainNode.gain.linearRampToValueAtTime(0.2, audioContext.currentTime + 0.2); // Sustain
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.4); // Fade out
+    
+    // Start and stop the oscillator
+    oscillator.start();
+    oscillator.stop(audioContext.currentTime + 0.4);
+  } catch(e) {
+    console.warn('Error playing shield sound:', e);
+  }
+}
+
+// Function to play game over sound
+function playGameOverSound() {
+  if (!audioContext) return; // Skip if audio context not available
+  
+  try {
+    // Create oscillator and gain nodes
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    // Connect nodes
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    // Set oscillator properties - downward sweep for game over
+    oscillator.type = 'sawtooth'; // More harsh sound for game over
+    oscillator.frequency.setValueAtTime(440, audioContext.currentTime); // Start at A4
+    oscillator.frequency.linearRampToValueAtTime(110, audioContext.currentTime + 0.5); // Sweep down to A2
+    
+    // Set gain with a longer decay for dramatic effect
+    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.8);
+    
+    // Start and stop the oscillator
+    oscillator.start();
+    oscillator.stop(audioContext.currentTime + 0.8);
+  } catch(e) {
+    console.warn('Error playing game over sound:', e);
+  }
+}
+
+// Function to play a sound when destroying an asteroid with shield
+function playAsteroidDestroySound() {
+  if (!audioContext) return; // Skip if audio context not available
+  
+  try {
+    // Create oscillators for a more complex sound
+    const osc1 = audioContext.createOscillator();
+    const osc2 = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    // Connect nodes
+    osc1.connect(gainNode);
+    osc2.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    // Set oscillator properties - explosive sound
+    osc1.type = 'square'; // More harsh sound for explosion
+    osc2.type = 'sawtooth'; // Add some grit
+    
+    // First oscillator - higher pitch descending
+    osc1.frequency.setValueAtTime(220, audioContext.currentTime); // A3
+    osc1.frequency.exponentialRampToValueAtTime(110, audioContext.currentTime + 0.2); // Down to A2
+    
+    // Second oscillator - lower rumble
+    osc2.frequency.setValueAtTime(110, audioContext.currentTime); // A2
+    osc2.frequency.exponentialRampToValueAtTime(55, audioContext.currentTime + 0.3); // Down to A1
+    
+    // Set gain with quick attack and medium decay
+    gainNode.gain.setValueAtTime(0.01, audioContext.currentTime);
+    gainNode.gain.linearRampToValueAtTime(0.3, audioContext.currentTime + 0.05); // Quick attack
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3); // Medium decay
+    
+    // Start and stop the oscillators
+    osc1.start();
+    osc2.start();
+    osc1.stop(audioContext.currentTime + 0.3);
+    osc2.stop(audioContext.currentTime + 0.3);
+  } catch(e) {
+    console.warn('Error playing asteroid destroy sound:', e);
+  }
+}
+
+// Function to start background music
+function startBackgroundMusic() {
+  if (!audioContext || backgroundMusic.isPlaying) return;
+  
+  // Resume audio context if it was suspended (browser autoplay policy)
+  if (audioContext.state === 'suspended') {
+    audioContext.resume();
+  }
+  
+  backgroundMusic.isPlaying = true;
+  backgroundMusic.noteIndex = 0;
+  backgroundMusic.nextNoteTime = audioContext.currentTime;
+  
+  // Schedule the first note
+  scheduleNextNote();
+}
+
+// Function to stop background music
+function stopBackgroundMusic() {
+  if (!backgroundMusic.isPlaying) return;
+  
+  // Clear any pending timers
+  if (backgroundMusic.timer) {
+    clearTimeout(backgroundMusic.timer);
+    backgroundMusic.timer = null;
+  }
+  
+  // Stop any currently playing oscillators
+  backgroundMusic.oscillators.forEach(osc => {
+    try {
+      osc.stop();
+      osc.disconnect();
+    } catch (e) {
+      // Ignore errors if oscillator was already stopped
+    }
+  });
+  
+  backgroundMusic.oscillators = [];
+  backgroundMusic.gainNodes = [];
+  backgroundMusic.isPlaying = false;
+}
+
+// Function to schedule the next note in the sequence
+function scheduleNextNote() {
+  if (!backgroundMusic.isPlaying || !audioContext) return;
+  
+  const currentNote = backgroundMusic.sequence[backgroundMusic.noteIndex];
+  const noteDuration = 60 / backgroundMusic.tempo * currentNote.duration;
+  
+  // Play the current note
+  playNote(currentNote.note, noteDuration);
+  
+  // Advance to next note
+  backgroundMusic.noteIndex = (backgroundMusic.noteIndex + 1) % backgroundMusic.sequence.length;
+  backgroundMusic.nextNoteTime += noteDuration;
+  
+  // Schedule the next note
+  const nextNoteDelay = (backgroundMusic.nextNoteTime - audioContext.currentTime) * 1000;
+  backgroundMusic.timer = setTimeout(scheduleNextNote, nextNoteDelay);
+}
+
+// Function to play a single note
+function playNote(noteName, duration) {
+  if (!audioContext) return;
+  
+  try {
+    // Convert note name to frequency
+    const frequency = noteToFrequency(noteName);
+    
+    // Create oscillator and gain node
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    // Connect nodes
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    // Set oscillator properties
+    oscillator.type = 'triangle'; // Softer sound for background music
+    oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
+    
+    // Set gain with envelope
+    gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+    gainNode.gain.linearRampToValueAtTime(0.1, audioContext.currentTime + 0.05); // Attack
+    gainNode.gain.linearRampToValueAtTime(0.08, audioContext.currentTime + duration * 0.5); // Sustain
+    gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + duration); // Release
+    
+    // Start and stop the oscillator
+    oscillator.start();
+    oscillator.stop(audioContext.currentTime + duration);
+    
+    // Store references to clean up later
+    backgroundMusic.oscillators.push(oscillator);
+    backgroundMusic.gainNodes.push(gainNode);
+    
+    // Clean up after the note is done
+    setTimeout(() => {
+      const index = backgroundMusic.oscillators.indexOf(oscillator);
+      if (index !== -1) {
+        backgroundMusic.oscillators.splice(index, 1);
+        backgroundMusic.gainNodes.splice(index, 1);
+      }
+    }, duration * 1000 + 100);
+  } catch(e) {
+    console.warn('Error playing background music note:', e);
+  }
+}
+
+// Helper function to convert note names to frequencies
+function noteToFrequency(note) {
+  const notes = { 'C': 0, 'C#': 1, 'D': 2, 'D#': 3, 'E': 4, 'F': 5, 'F#': 6, 'G': 7, 'G#': 8, 'A': 9, 'A#': 10, 'B': 11 };
+  const noteName = note.slice(0, -1);
+  const octave = parseInt(note.slice(-1));
+  
+  // A4 is 440Hz
+  const semitoneFromA4 = (octave - 4) * 12 + notes[noteName] - notes['A'];
+  return 440 * Math.pow(2, semitoneFromA4 / 12);
 }
