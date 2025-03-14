@@ -790,7 +790,7 @@ class Gem {
     
     switch(spawnSide) {
       case 0: // Top
-        return createVector(
+    return createVector(
           random(0, width),
           -this.size
         );
@@ -892,7 +892,7 @@ class Gem {
     // Draw glow effect if jellybean is glowing
     if (this.glowing) {
       for (let i = 3; i > 0; i--) {
-        noStroke();
+    noStroke();
         fill(red(this.glowColor), green(this.glowColor), blue(this.glowColor), 100 - i * 20);
         // Pulse the size for magical effect
         let pulseSize = 1 + this.pulseAmount + i * 0.1;
@@ -955,7 +955,7 @@ class Asteroid {
     
     switch(spawnSide) {
       case 0: // Top
-        return createVector(
+    return createVector(
           random(0, width),
           -this.size * 2
         );
@@ -1050,7 +1050,7 @@ function spawnGem() {
     addFloatingText(width/2, height/2 - 100, "SPECIAL GEM APPEARED!");
   } else {
     // Normal gem
-    gems.push(new Gem());
+  gems.push(new Gem());
   }
 }
 
@@ -1494,6 +1494,19 @@ function touchStarted() {
       return false;
     }
     return true; // Allow default behavior outside canvas
+  }
+  
+  // Check if the return button was tapped in skin menu
+  if (gameState === "skinMenu" && window.returnButtonArea) {
+    const btn = window.returnButtonArea;
+    if (mouseX >= btn.x && mouseX <= btn.x + btn.width &&
+        mouseY >= btn.y && mouseY <= btn.y + btn.height) {
+      // Return to game
+      gameState = "playing";
+      // Play a sound for feedback
+      playCollectSound();
+      return false; // Prevent default
+    }
   }
   
   // Check if the skin hint was tapped (for mobile users)
@@ -2378,16 +2391,43 @@ function showSkinMenu() {
   textSize(20);
   text(`Coins: ${totalCoins}`, width/2, 120);
   
-  // Display skins
-  const skinWidth = 120;
-  const skinHeight = 150;
-  const padding = 20;
+  // Calculate skin dimensions based on screen size and number of skins
+  // For mobile, make skins smaller to fit all on screen
+  let skinWidth, skinHeight, padding;
+  
+  if (isMobile) {
+    // Calculate how many skins we can fit horizontally with reasonable size
+    const availableWidth = width * 0.9; // Use 90% of screen width
+    padding = 10; // Smaller padding for mobile
+    
+    // Calculate the maximum possible width for each skin
+    skinWidth = Math.min(100, (availableWidth - (padding * (unicornSkins.length - 1))) / unicornSkins.length);
+    skinHeight = skinWidth * 1.25; // Maintain aspect ratio
+  } else {
+    // Desktop sizes
+    skinWidth = 120;
+    skinHeight = 150;
+    padding = 20;
+  }
+  
   const startX = width/2 - ((skinWidth + padding) * unicornSkins.length) / 2 + skinWidth/2;
+  
+  // Store skin positions for click detection
+  window.skinPositions = [];
   
   for (let i = 0; i < unicornSkins.length; i++) {
     const skin = unicornSkins[i];
     const x = startX + i * (skinWidth + padding);
     const y = height/2;
+    
+    // Store position for click detection
+    window.skinPositions.push({
+      index: i,
+      x: x,
+      y: y,
+      width: skinWidth,
+      height: skinHeight
+    });
     
     // Draw skin box
     if (currentSkinIndex === i) {
@@ -2411,38 +2451,40 @@ function showSkinMenu() {
     rect(x - skinWidth/2, y - skinHeight/2, skinWidth, skinHeight, 10);
     
     // Draw unicorn preview (simplified)
+    const previewScale = skinWidth / 120; // Scale based on original size
+    
     if (skin.unlocked) {
       noStroke();
       fill(skin.bodyColor[0], skin.bodyColor[1], skin.bodyColor[2]);
-      ellipse(x, y - 20, 50, 60); // Body
-      ellipse(x, y - 50, 30, 30); // Head
+      ellipse(x, y - 20 * previewScale, 50 * previewScale, 60 * previewScale); // Body
+      ellipse(x, y - 50 * previewScale, 30 * previewScale, 30 * previewScale); // Head
     } else {
       // Locked icon
       noStroke();
       fill(150);
-      ellipse(x, y - 20, 50, 60); // Body (grayed out)
-      ellipse(x, y - 50, 30, 30); // Head (grayed out)
+      ellipse(x, y - 20 * previewScale, 50 * previewScale, 60 * previewScale); // Body (grayed out)
+      ellipse(x, y - 50 * previewScale, 30 * previewScale, 30 * previewScale); // Head (grayed out)
       
       // Lock icon
       fill(200);
-      rect(x - 10, y - 30, 20, 25, 5);
-      ellipse(x, y - 35, 20, 20);
+      rect(x - 10 * previewScale, y - 30 * previewScale, 20 * previewScale, 25 * previewScale, 5);
+      ellipse(x, y - 35 * previewScale, 20 * previewScale, 20 * previewScale);
     }
     
     // Skin name
     noStroke();
     fill(255);
-    textSize(16);
-    text(skin.name, x, y + 40);
+    textSize(Math.max(12, 16 * previewScale)); // Minimum text size for readability
+    text(skin.name, x, y + 40 * previewScale);
     
     // Price or status
-    textSize(14);
+    textSize(Math.max(10, 14 * previewScale)); // Minimum text size for readability
     if (skin.unlocked) {
       fill(100, 255, 100);
-      text("Unlocked", x, y + 60);
+      text("Unlocked", x, y + 60 * previewScale);
     } else {
       fill(255, 215, 0);
-      text(`${skin.cost} coins`, x, y + 60);
+      text(`${skin.cost} coins`, x, y + 60 * previewScale);
     }
   }
   
@@ -2450,45 +2492,81 @@ function showSkinMenu() {
   fill(255);
   textSize(16);
   text("Click on a skin to select or unlock it", width/2, height - 80);
-  text("Press ESC to return to the game", width/2, height - 50);
+  
+  // Return to game button - make it more visible and touchable on mobile
+  const returnText = isMobile ? "Tap here to return to game" : "Press ESC to return to the game";
+  const returnY = height - 50;
+  
+  // Store the return button area for click detection
+  window.returnButtonArea = {
+    x: width/2 - textWidth(returnText)/2 - 10,
+    y: returnY - 15,
+    width: textWidth(returnText) + 20,
+    height: 30
+  };
+  
+  // Draw button background with pulsing effect for mobile
+  if (isMobile) {
+    let pulseAmount = sin(frameCount * 0.05) * 0.5 + 0.5; // Value between 0 and 1
+    noStroke();
+    fill(70, 70, 100, 150 + 50 * pulseAmount);
+    rect(window.returnButtonArea.x, window.returnButtonArea.y, 
+         window.returnButtonArea.width, window.returnButtonArea.height, 15);
+  }
+  
+  // Draw return text
+  fill(255);
+  text(returnText, width/2, returnY);
 }
 
 // Function to handle skin menu clicks
 function handleSkinMenuClick() {
   if (gameState !== "skinMenu") return;
   
-  const skinWidth = 120;
-  const skinHeight = 150;
-  const padding = 20;
-  const startX = width/2 - ((skinWidth + padding) * unicornSkins.length) / 2 + skinWidth/2;
+  // Check if the return button was clicked
+  if (window.returnButtonArea) {
+    const btn = window.returnButtonArea;
+    if (mouseX >= btn.x && mouseX <= btn.x + btn.width &&
+        mouseY >= btn.y && mouseY <= btn.y + btn.height) {
+      // Return to game
+      gameState = "playing";
+      // Play a sound for feedback
+      playCollectSound();
+      return;
+    }
+  }
   
-  for (let i = 0; i < unicornSkins.length; i++) {
-    const x = startX + i * (skinWidth + padding);
-    const y = height/2;
-    
-    // Check if click is within this skin's box
-    if (mouseX >= x - skinWidth/2 && mouseX <= x + skinWidth/2 &&
-        mouseY >= y - skinHeight/2 && mouseY <= y + skinHeight/2) {
+  // Use stored skin positions for click detection
+  if (window.skinPositions) {
+    for (let i = 0; i < window.skinPositions.length; i++) {
+      const skin = window.skinPositions[i];
       
-      // If skin is unlocked, select it
-      if (unicornSkins[i].unlocked) {
-        selectSkin(i);
-        // Play selection sound
-        playCollectSound();
-      } else {
-        // Try to unlock it
-        if (unlockSkin(i)) {
-          // Play unlock sound
-          playShieldSound();
-          // Add notification
-          addFloatingText(width/2, height/2 - 100, `${unicornSkins[i].name} Skin Unlocked!`);
+      // Check if click is within this skin's box
+      if (mouseX >= skin.x - skin.width/2 && mouseX <= skin.x + skin.width/2 &&
+          mouseY >= skin.y - skin.height/2 && mouseY <= skin.y + skin.height/2) {
+        
+        const skinIndex = skin.index;
+        
+        // If skin is unlocked, select it
+        if (unicornSkins[skinIndex].unlocked) {
+          selectSkin(skinIndex);
+          // Play selection sound
+          playCollectSound();
         } else {
-          // Not enough coins
-          addFloatingText(width/2, height/2 - 100, "Not enough coins!");
+          // Try to unlock it
+          if (unlockSkin(skinIndex)) {
+            // Play unlock sound
+            playShieldSound();
+            // Add notification
+            addFloatingText(width/2, height/2 - 100, `${unicornSkins[skinIndex].name} Skin Unlocked!`);
+          } else {
+            // Not enough coins
+            addFloatingText(width/2, height/2 - 100, "Not enough coins!");
+          }
         }
+        
+        break;
       }
-      
-      break;
     }
   }
 }
