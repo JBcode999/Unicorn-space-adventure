@@ -1699,17 +1699,11 @@ function touchStarted() {
     return true; // Allow default behavior outside canvas
   }
   
-  // Check if the return button was tapped in skin menu
-  if (gameState === "skinMenu" && window.returnButtonArea) {
-    const btn = window.returnButtonArea;
-    if (mouseX >= btn.x && mouseX <= btn.x + btn.width &&
-        mouseY >= btn.y && mouseY <= btn.y + btn.height) {
-      // Return to game
-      gameState = "playing";
-      // Play a sound for feedback
-      playCollectSound();
-      return false; // Prevent default
-    }
+  // Handle skin menu interactions on mobile
+  if (gameState === "skinMenu") {
+    // Call the same function that handles mouse clicks
+    handleSkinMenuClick();
+    return false; // Prevent default behavior
   }
   
   // Check if the skin hint was tapped (for mobile users)
@@ -2803,17 +2797,15 @@ function showSkinMenu() {
   text(`Coins: ${totalCoins}`, width/2, 120);
   
   // Calculate skin dimensions based on screen size and number of skins
-  // For mobile, make skins smaller to fit all on screen
+  // For mobile, make skins larger for better touch targets
   let skinWidth, skinHeight, padding;
   
   if (isMobile) {
-    // Calculate how many skins we can fit horizontally with reasonable size
+    // Mobile sizes - larger touch targets
     const availableWidth = width * 0.9; // Use 90% of screen width
-    padding = 10; // Smaller padding for mobile
-    
-    // Calculate the maximum possible width for each skin
-    skinWidth = Math.min(100, (availableWidth - (padding * (unicornSkins.length - 1))) / unicornSkins.length);
-    skinHeight = skinWidth * 1.25; // Maintain aspect ratio
+    skinWidth = min(availableWidth / unicornSkins.length - 10, 100);
+    skinHeight = skinWidth * 1.5; // Taller aspect ratio for better touch
+    padding = 10; // Smaller padding on mobile
   } else {
     // Desktop sizes
     skinWidth = 120;
@@ -2851,7 +2843,7 @@ function showSkinMenu() {
     } else if (totalCoins >= skin.cost) {
       // Highlight skins that can be unlocked
       stroke(100, 255, 100); // Green
-      strokeWeight(3);
+      strokeWeight(4); // Thicker stroke for better visibility
     } else {
       stroke(150);
       strokeWeight(1);
@@ -2862,11 +2854,22 @@ function showSkinMenu() {
       fill(50, 50, 70);
     } else if (totalCoins >= skin.cost) {
       // Different background for skins that can be unlocked
-      fill(40, 60, 40);
+      fill(40, 70, 40); // Brighter green background
     } else {
       fill(30, 30, 40);
     }
+    
+    // Draw box with rounded corners
     rect(x - skinWidth/2, y - skinHeight/2, skinWidth, skinHeight, 10);
+    
+    // For mobile, add a pulsing effect to unlockable skins
+    if (isMobile && !skin.unlocked && totalCoins >= skin.cost) {
+      let pulseAmount = sin(frameCount * 0.1) * 0.5 + 0.5; // Value between 0 and 1
+      noFill();
+      stroke(100, 255, 100, 150 * pulseAmount);
+      strokeWeight(2 + 2 * pulseAmount);
+      rect(x - skinWidth/2 - 2, y - skinHeight/2 - 2, skinWidth + 4, skinHeight + 4, 12);
+    }
     
     // Draw unicorn preview (simplified)
     const previewScale = skinWidth / 120; // Scale based on original size
@@ -2903,7 +2906,26 @@ function showSkinMenu() {
     } else if (totalCoins >= skin.cost) {
       // Highlight price when player has enough coins
       fill(100, 255, 100); // Green
-      text(`Tap to Buy: ${skin.cost} coins`, x, y + 60 * previewScale);
+      
+      // For mobile, make the tap to buy message more prominent
+      if (isMobile) {
+        // Add a pulsing background for the text
+        let pulseAmount = sin(frameCount * 0.1) * 0.5 + 0.5; // Value between 0 and 1
+        noStroke();
+        fill(40, 100, 40, 150 + 50 * pulseAmount);
+        rect(x - skinWidth/2 + 5, y + 50 * previewScale, skinWidth - 10, 20, 5);
+        
+        // Make text larger and brighter
+        fill(120, 255, 120);
+        textSize(Math.max(12, 16 * previewScale));
+        text(`TAP TO BUY: ${skin.cost}`, x, y + 60 * previewScale);
+        
+        // Add a small coin icon
+        fill(255, 215, 0); // Gold
+        ellipse(x + textWidth(`TAP TO BUY: ${skin.cost}`)/2 - 8, y + 60 * previewScale - 5, 8, 8);
+      } else {
+        text(`Tap to Buy: ${skin.cost} coins`, x, y + 60 * previewScale);
+      }
     } else {
       fill(255, 215, 0);
       text(`${skin.cost} coins`, x, y + 60 * previewScale);
@@ -2945,11 +2967,14 @@ function showSkinMenu() {
 function handleSkinMenuClick() {
   if (gameState !== "skinMenu") return;
   
+  console.log(`Handling skin menu interaction at position: (${mouseX}, ${mouseY})`);
+  
   // Check if the return button was clicked
   if (window.returnButtonArea) {
     const btn = window.returnButtonArea;
     if (mouseX >= btn.x && mouseX <= btn.x + btn.width &&
         mouseY >= btn.y && mouseY <= btn.y + btn.height) {
+      console.log("Return button clicked/tapped");
       // Return to game
       gameState = "playing";
       // Play a sound for feedback
@@ -2960,13 +2985,19 @@ function handleSkinMenuClick() {
   
   // Use stored skin positions for click detection
   if (window.skinPositions) {
+    console.log(`Found ${window.skinPositions.length} skin positions for click detection`);
+    
     for (let i = 0; i < window.skinPositions.length; i++) {
       const skin = window.skinPositions[i];
+      
+      // Log skin position for debugging
+      console.log(`Skin ${i} position: (${skin.x}, ${skin.y}), size: ${skin.width}x${skin.height}`);
       
       // Check if click is within this skin's box
       if (mouseX >= skin.x - skin.width/2 && mouseX <= skin.x + skin.width/2 &&
           mouseY >= skin.y - skin.height/2 && mouseY <= skin.y + skin.height/2) {
         
+        console.log(`Touch/click detected on skin ${i}`);
         const skinIndex = skin.index;
         console.log(`Clicked on skin ${skinIndex}: ${unicornSkins[skinIndex].name}`);
         
@@ -3009,6 +3040,8 @@ function handleSkinMenuClick() {
         break;
       }
     }
+  } else {
+    console.warn("No skin positions found for click detection");
   }
 }
 
