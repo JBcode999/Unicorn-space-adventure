@@ -67,7 +67,7 @@ let unicornSkins = [
     unlocked: false, 
     bodyColor: [180, 180, 200],
     ability: "fasterLaser",
-    description: "Rapid-fire lasers"
+    description: "Dual rapid-fire lasers"
   }
 ];
 let currentSkinIndex = 0;
@@ -744,8 +744,16 @@ class Player {
     
     // Automatic shooting when laser power-up is active
     if (this.hasLaser) {
-      this.autoShootTimer++;
-      if (this.autoShootTimer >= this.shootCooldown) {
+      // Check if player has the Robot skin for faster shooting
+      const hasFasterLaser = unicornSkins[currentSkinIndex].ability === "fasterLaser";
+      
+      // Increase autoShootTimer at double speed for Robot skin
+      this.autoShootTimer += hasFasterLaser ? 2 : 1;
+      
+      // Get cooldown based on skin
+      const cooldown = hasFasterLaser ? Math.floor(this.shootCooldown / 2) : this.shootCooldown;
+      
+      if (this.autoShootTimer >= cooldown) {
         this.autoShootTimer = 0;
         return this.shootLaser(true); // true indicates automatic shooting
       }
@@ -865,6 +873,15 @@ class Player {
       lasers.push(rightLaser);
       
       return lasers;
+    } else if (currentAbility === "fasterLaser") {
+      // Robot skin: Dual parallel lasers
+      const lasers = [];
+      
+      // Two parallel lasers side by side
+      lasers.push(new Laser(this.pos.x - 8, this.pos.y - this.size/2));
+      lasers.push(new Laser(this.pos.x + 8, this.pos.y - this.size/2));
+      
+      return lasers;
     } else {
       // Standard single laser for other skins
       return new Laser(this.pos.x, this.pos.y - this.size/2);
@@ -919,13 +936,23 @@ class Player {
         
         // Draw more laser beams for Robot skin
         if (hasFasterLaser) {
-          // Multiple laser beams
-          for (let i = 0; i < 3; i++) {
-            let angle = random(-0.3, 0.3);
-            line(0, -this.size * 0.8, 
-                 cos(angle) * this.size * 0.5, 
-                 -this.size * 1.2 - sin(angle) * this.size * 0.5);
-          }
+          // Two energy points that shoot dual lasers
+          stroke(hue, 90, 100, 200);
+          strokeWeight(2);
+          
+          // Left laser beam
+          line(-this.size * 0.1, -this.size * 0.85, 
+               -this.size * 0.1, -this.size * 1.2);
+          
+          // Right laser beam
+          line(this.size * 0.1, -this.size * 0.85, 
+               this.size * 0.1, -this.size * 1.2);
+          
+          // Energy glow at the tips
+          noStroke();
+          fill(hue, 90, 100, 150);
+          ellipse(-this.size * 0.1, -this.size * 1.2, 4, 4);
+          ellipse(this.size * 0.1, -this.size * 1.2, 4, 4);
         } else {
           // Single laser beam
           line(0, -this.size * 0.8, random(-10, 10), -this.size * 1.2);
@@ -1071,6 +1098,49 @@ class Player {
           // Side horn glows
           line(-this.size * 0.15, -this.size * 0.85, -this.size * 0.15, -this.size * 1.3);
           line(this.size * 0.15, -this.size * 0.85, this.size * 0.15, -this.size * 1.3);
+          
+          colorMode(RGB, 255, 255, 255, 255);
+        }
+      }
+    } else if (unicornSkins[currentSkinIndex].ability === "fasterLaser" && this.hasLaser) {
+      // Special dual-tipped horn for Robot skin
+      // Main horn base (wider)
+      beginShape();
+      vertex(-this.size * 0.18, -this.size * 0.9);
+      vertex(0, -this.size * 1.2);
+      vertex(this.size * 0.18, -this.size * 0.9);
+      endShape(CLOSE);
+      
+      // Two prongs at the top
+      fill(200, 200, 220); // Metallic silver for robot
+      
+      // Left prong
+      beginShape();
+      vertex(-this.size * 0.12, -this.size * 1.1);
+      vertex(-this.size * 0.1, -this.size * 1.35);
+      vertex(-this.size * 0.04, -this.size * 1.1);
+      endShape(CLOSE);
+      
+      // Right prong
+      beginShape();
+      vertex(this.size * 0.04, -this.size * 1.1);
+      vertex(this.size * 0.1, -this.size * 1.35);
+      vertex(this.size * 0.12, -this.size * 1.1);
+      endShape(CLOSE);
+      
+      // Add tech glow to the prongs
+      if (frameCount % 5 < 3) {
+        for (let i = 0; i < 2; i++) {
+          colorMode(HSB, 360, 100, 100, 255);
+          let hue = ((frameCount * 5) % 60) + 180; // Blue-cyan range
+          stroke(hue, 80, 100, 150);
+          strokeWeight(1);
+          
+          // Left prong energy line
+          line(-this.size * 0.08, -this.size * 1.1, -this.size * 0.1, -this.size * 1.4);
+          
+          // Right prong energy line
+          line(this.size * 0.08, -this.size * 1.1, this.size * 0.1, -this.size * 1.4);
           
           colorMode(RGB, 255, 255, 255, 255);
         }
